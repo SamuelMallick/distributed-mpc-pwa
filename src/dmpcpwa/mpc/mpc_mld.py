@@ -1,10 +1,7 @@
 import logging
-from typing import List
 
-import casadi as cs
 import gurobipy as gp
 import numpy as np
-from csnlp.wrappers import Mpc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.CRITICAL)
@@ -243,6 +240,6 @@ class MpcMld:
             x = np.zeros((self.n, self.N + 1))
             logger.info("Infeasible")
 
-        runtime = self.mpc_model.Runtime
-        node_count = self.mpc_model.NodeCount
+        self.mpc_model.Runtime
+        self.mpc_model.NodeCount
         return u[:, [0]], x

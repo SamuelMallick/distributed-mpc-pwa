@@ -1,11 +1,10 @@
 from itertools import product
-from typing import List
 
 import numpy as np
 from scipy.linalg import block_diag
 
 
-def cent_from_dist(d_systems: List[dict], Adj: np.ndarray):
+def cent_from_dist(d_systems: list[dict], Adj: np.ndarray):
     """Creates a centralised representation of the distributed PWA system.
     PWA dynamics represented as: x+ = A[i]x + B[i]u + c[i] if S[i]x + R[i]u <= T.
     With state and control constraints Dx <= E, Fu <= G.

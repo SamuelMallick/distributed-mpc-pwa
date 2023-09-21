@@ -1,18 +1,15 @@
 import logging
-from typing import Any, List, Literal, Optional, Sequence, Union
+from typing import Any, Literal
 
 import casadi as cs
-import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
-from csnlp.wrappers import Mpc
-from gymnasium import Env
-from mpcrl import Agent
-from mpcrl.agents.agent import ActType, ObsType, SymType
-
-from dmpcpwa.agents.pwa_agent import PwaAgent
 from dmpcrl.core.admm import AdmmCoordinator
 from dmpcrl.mpc.mpc_admm import MpcAdmm
+from gymnasium import Env
+from mpcrl import Agent
+from mpcrl.agents.agent import ActType, ObsType
+
+from dmpcpwa.agents.pwa_agent import PwaAgent
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -32,9 +29,9 @@ class SqpAdmmCoordinator(Agent):
     def __init__(
         self,
         local_mpcs: list[MpcAdmm],
-        local_fixed_parameters: List[dict],
-        systems: List[dict],
-        G: List[List[int]],
+        local_fixed_parameters: list[dict],
+        systems: list[dict],
+        G: list[list[int]],
         Adj: np.ndarray,
         rho: float,
         warmstart: Literal["last", "last-successful"] = "last-successful",
@@ -204,7 +201,6 @@ class SqpAdmmCoordinator(Agent):
                     if not first_iter_flag:
                         logger.debug(f"cost decreased by: {cost_opt - cost_temp}")
 
-                    cost_opt = cost_temp
                     # extract vars over horizon
                     for i in range(self.n):
                         u[i] = np.asarray(sol_list[i].vals["u"])
@@ -234,7 +230,7 @@ class SqpAdmmCoordinator(Agent):
 
         return cs.DM(action_list_opt), sol_list
 
-    def dynamics_rollout(self, x: List[np.ndarray], u: List[np.ndarray]):
+    def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
         """For a given state and u, rollout the agents' dynamics step by step."""
         x_temp = [np.zeros((self.nx_l, self.N)) for i in range(self.n)]
 

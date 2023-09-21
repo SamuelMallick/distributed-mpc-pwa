@@ -2,7 +2,7 @@
 # 2003 paper on PWA systems, adapted to be a network
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import casadi as cs
 import gymnasium as gym
@@ -10,16 +10,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from csnlp import Nlp
+from dmpcrl.core.admm import g_map
 from gymnasium.wrappers import TimeLimit
-from mpcrl.wrappers.agents import Log, RecordUpdates
+from mpcrl.wrappers.agents import Log
 from mpcrl.wrappers.envs import MonitorEpisodes
 from scipy.linalg import block_diag
 
 from dmpcpwa.agents.g_admm_coordinator import GAdmmCoordinator
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.agents.sqp_admm_coordinator import SqpAdmmCoordinator
-from dmpcrl.core.admm import g_map
-from dmpcrl.mpc.mpc_admm import MpcAdmm
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 from dmpcpwa.utils.pwa_models import cent_from_dist
@@ -91,9 +90,9 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     def reset(
         self,
         *,
-        seed: Optional[int] = None,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[npt.NDArray[np.floating], Dict[str, Any]]:
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
         # self.x = np.tile([-5, 9], n).reshape(nx_l * n, 1)
@@ -109,7 +108,7 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
 
     def step(
         self, action: cs.DM
-    ) -> Tuple[npt.NDArray[np.floating], float, bool, bool, Dict[str, Any]]:
+    ) -> tuple[npt.NDArray[np.floating], float, bool, bool, dict[str, Any]]:
         """Steps the LTI system."""
 
         action = action.full()

@@ -1,38 +1,83 @@
-import logging
-from typing import Any, Collection, List, Literal, Optional, Sequence, Union
-
-import casadi as cs
 import gurobipy as gp
-import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
-from csnlp.wrappers import Mpc
+from ACC_env import CarFleet
+from ACC_model import ACC
+from dmpcrl.core.admm import g_map
 from gymnasium import Env
-from mpcrl import Agent
-from mpcrl.agents.agent import ActType, ObsType, SymType
+from gymnasium.wrappers import TimeLimit
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
+from mpcrl.wrappers.envs import MonitorEpisodes
+from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
-from dmpcpwa.agents.pwa_agent import PwaAgent
-from dmpcrl.core.admm import AdmmCoordinator
-from dmpcrl.mpc.mpc_admm import MpcAdmm
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+np.random.seed(1)
+
+n = 2  # num cars
+N = 5  # controller horizon
+w = 100  # slack variable penalty
+
+ep_len = 100  # length of episode (sim len)
+Adj = np.zeros((n, n))  # adjacency matrix
+if n > 1:
+    for i in range(n):  # make it chain coupling
+        if i == 0:
+            Adj[i, i + 1] = 1
+        elif i == n - 1:
+            Adj[i, i - 1] = 1
+        else:
+            Adj[i, i + 1] = 1
+            Adj[i, i - 1] = 1
+else:
+    Adj = np.zeros((1, 1))
+G_map = g_map(Adj)
+
+acc = ACC(ep_len, N)
+nx_l = acc.nx_l
+nu_l = acc.nu_l
+system = acc.get_pwa_system()
+Q_x_l = acc.Q_x_l
+Q_u_l = acc.Q_u_l
+sep = acc.sep
+d_safe = acc.d_safe
+leader_state = acc.get_leader_state()
 
 
-class SequentialMldCoordinator(MldAgent):
-    """A coordinatoof MLD agents that solve their local problems in a sequence, communicating the soltuions to the next agent in sequence."""
+class LocalMpcMld(MpcMld):
+    def __init__(self, system: dict, N: int) -> None:
+        super().__init__(system, N)
 
+        # extra constraints
+        self.s = self.mpc_model.addMVar((1, N + 1), lb=0, ub=float("inf"), name="s")
+        self.safety_constraints = []
+        for k in range(N):
+            # accel cnstrs
+            self.mpc_model.addConstr(
+                self.x[1, [k + 1]] - self.x[1, [k]] <= acc.a_acc * acc.ts,
+                name=f"acc_{k}",
+            )
+            self.mpc_model.addConstr(
+                self.x[1, [k + 1]] - self.x[1, [k]] >= acc.a_dec * acc.ts,
+                name=f"dec_{k}",
+            )
+            # safe distance constraints - RHS updated each timestep by coordinator
+            self.safety_constraints.append(
+                self.mpc_model.addConstr(
+                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"), name=f"safety_{k}"
+                )
+            )
+        self.safety_constraints.append(
+            self.mpc_model.addConstr(
+                self.x[0, [N]] - self.s[:, [N]] <= float("inf"), name=f"safety_{N}"
+            )
+        )
+
+
+class TrackingSequentialMldCoordinator(MldAgent):
     def __init__(
         self,
-        local_mpcs: List[MpcMld],
+        local_mpcs: list[MpcMld],
         nx_l: int,
         nu_l: int,
         Q_x_l: np.ndarray,
@@ -125,3 +170,41 @@ class SequentialMldCoordinator(MldAgent):
 
             u[i] = self.agents[i].get_control(xl)
         return np.vstack(u)
+
+    # here we only set the leader, because the solutions are communicated down the sequence to other agents
+    def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
+        x_goal = leader_state[:, timestep : timestep + N + 1]
+        self.agents[0].set_cost(Q_x_l, Q_u_l, x_goal)
+        return super().on_timestep_end(env, episode, timestep)
+
+    def on_episode_start(self, env: Env, episode: int) -> None:
+        x_goal = leader_state[:, 0 : N + 1]
+        self.agents[0].set_cost(Q_x_l, Q_u_l, x_goal)
+        return super().on_episode_start(env, episode)
+
+
+# env
+env = MonitorEpisodes(TimeLimit(CarFleet(acc, n), max_episode_steps=ep_len))
+# coordinator
+local_mpcs: list[MpcMld] = []
+for i in range(n):
+    # passing local system
+    local_mpcs.append(LocalMpcMld(system, N))
+agent = TrackingSequentialMldCoordinator(
+    local_mpcs, nx_l, nu_l, Q_x_l, Q_u_l, sep, d_safe, w, N
+)
+
+agent.evaluate(env=env, episodes=1, seed=1)
+
+if len(env.observations) > 0:
+    X = env.observations[0].squeeze()
+    U = env.actions[0].squeeze()
+    R = env.rewards[0]
+else:
+    X = np.squeeze(env.ep_observations)
+    U = np.squeeze(env.ep_actions)
+    R = np.squeeze(env.ep_rewards)
+
+print(f"Return = {sum(R.squeeze())}")
+
+plot_fleet(n, X, U, R, leader_state)

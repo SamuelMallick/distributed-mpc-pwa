@@ -1,9 +1,5 @@
-from typing import List, Literal, Optional
-
 import casadi as cs
 import numpy as np
-from csnlp.wrappers.wrapper import Nlp
-
 from dmpcrl.mpc.mpc_admm import MpcAdmm
 
 
@@ -18,7 +14,7 @@ class MpcSwitching(MpcAdmm):
         r: int,
         x: cs.SX,
         u: cs.SX,
-        x_c_list: List[cs.SX],
+        x_c_list: list[cs.SX],
     ) -> None:
         """Initialised the switching dynamics and constraints with the correct dimension and all zero values
 

@@ -1,10 +1,8 @@
-from typing import Collection, List, Literal, Optional, Union
+from typing import Literal
 
-import casadi as cs
 import numpy as np
-from csnlp import Nlp
 from csnlp.wrappers import Mpc
-from mpcrl.agents.agent import ActType, Agent, ObsType, SymType
+from mpcrl.agents.agent import Agent, SymType
 
 
 class PwaAgent(Agent[SymType]):
@@ -59,7 +57,7 @@ class PwaAgent(Agent[SymType]):
 
         self.num_neighbours = len(self.Ac[0])
 
-    def next_state(self, x: np.ndarray, u: np.ndarray, xc: List[np.ndarray] = None):
+    def next_state(self, x: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None):
         """Increment the dynamics as x+ = A[i]x + B[i]u + c[i] + sum_j Ac[i]_j xc_j
         if S[i]x + R[i]u <= T.
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
@@ -79,7 +77,7 @@ class PwaAgent(Agent[SymType]):
         raise RuntimeError("Didn't find PWA region for given state-control.")
 
     def eval_sequences(
-        self, x0: np.ndarray, u: np.ndarray, xc: List[np.ndarray] = None
+        self, x0: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None
     ):
         """Evaluate all possible sqitching sequences of PWA dynamics by rolling out
         dynamics from state x, applying control u, and coupled states xc."""
@@ -119,7 +117,7 @@ class PwaAgent(Agent[SymType]):
                 regions.append(i)
         return regions
 
-    def set_sequence(self, s: List[int]):
+    def set_sequence(self, s: list[int]):
         """Modify the parameters in the constraints of the ADMM Mpc to
         enforce the sequence s"""
 

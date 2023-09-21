@@ -1,10 +1,11 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any
 
 import casadi as cs
 import gymnasium as gym
 import numpy as np
 import numpy.typing as npt
 from ACC_model import ACC
+
 
 class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     """A fleet of non-linear hybrid vehicles who track each other."""
@@ -26,9 +27,9 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     def reset(
         self,
         *,
-        seed: Optional[int] = None,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[npt.NDArray[np.floating], Dict[str, Any]]:
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
         starting_positions = [
@@ -71,7 +72,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
 
     def step(
         self, action: cs.DM
-    ) -> Tuple[npt.NDArray[np.floating], float, bool, bool, Dict[str, Any]]:
+    ) -> tuple[npt.NDArray[np.floating], float, bool, bool, dict[str, Any]]:
         """Steps the LTI system."""
 
         action = action.full()
