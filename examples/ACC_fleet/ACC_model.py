@@ -219,7 +219,8 @@ class ACC:
                 x_temp[self.nx_l * i : self.nx_l * (i + 1), :] = x_l + DT * (
                     f + B * u_l
                 )
-                
+
+                # TODO handle this better
                 # force velocity to be above 2 where PWA dynamics are valid
                 if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
                     x_temp[self.nx_l * (i) + 1, :] = self.x2_min
@@ -251,6 +252,29 @@ class ACC:
             x_temp[self.nx_l * i : self.nx_l * (i + 1), :] = x_pwa
 
         return x_temp
+
+    def get_u_for_constant_vel(self, v):
+        """returns the control input which will keep the velocity v constant, as by the PWA dynamics."""
+
+        x = np.array([[0], [v[0]]])  # first state does not matter for this pwa sys
+        u = np.array([[0]])  # neither does control
+
+        for j in range(len(self.pwa_system["S"])):
+            if all(
+                self.pwa_system["S"][j] @ x + self.pwa_system["R"][j] @ u
+                <= self.pwa_system["T"][j]
+                + np.array(
+                    [[0], [1e-4]]
+                )  # buffer is to have one of the as a strict inequality
+            ):
+                # This is VERY specific to this system, DO NOT reuse this code on other PWA systems.
+                return (1 / self.pwa_system["B"][j][1, 0]) * (
+                    v
+                    - self.pwa_system["A"][j][1, 1] * v
+                    - self.pwa_system["c"][j][1, 0]
+                )
+
+        raise RuntimeError("Didn't find any PWa region for the given speed!")
 
     def get_leader_state(self):
         return self.leader_state
