@@ -11,8 +11,9 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     """A fleet of non-linear hybrid vehicles who track each other."""
 
     step_counter = 0
+    viol_counter = []   # count constraint violations for each ep
 
-    def __init__(self, acc: ACC, n: int) -> None:
+    def __init__(self, acc: ACC, n: int, ep_len: int) -> None:
         self.acc = acc
         self.nx_l = acc.nx_l
         self.nu_l = acc.nu_l
@@ -22,6 +23,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self.sep = acc.sep
         self.leader_state = acc.get_leader_state()
         self.n = n
+        self.ep_len = ep_len
         super().__init__()
 
     def reset(
@@ -44,13 +46,16 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
             self.x[i * self.nx_l, :] = init_pos
             self.x[i * self.nx_l + 1, :] = starting_velocities[i]
             starting_positions.remove(init_pos)
+
+        self.step_counter = 0
+        self.viol_counter.append(np.zeros((self.ep_len)))
         return self.x, {}
 
     def get_stage_cost(
         self, state: npt.NDArray[np.floating], action: npt.NDArray[np.floating]
     ) -> float:
         """Computes the stage cost `L(s,a)`."""
-        # TODO count OR penalise constraint violations in environment
+
         cost = 0
         for i in range(self.n):
             local_state = state[self.nx_l * i : self.nx_l * (i + 1), :]
@@ -68,6 +73,14 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
                 cost += (local_state - follow_state - self.sep).T @ self.Q_x_l @ (
                     local_state - follow_state - self.sep
                 ) + local_action.T @ self.Q_u_l @ local_action
+        
+            # check for constraint violations
+            if i < self.n-1:
+                local_state_behind = state[self.nx_l * (i+1) : self.nx_l * (i + 2), :]
+                if local_state[0] - local_state_behind[0] < self.acc.d_safe:
+                    self.viol_counter[-1][self.step_counter] = 100
+
+
         return cost
 
     def step(

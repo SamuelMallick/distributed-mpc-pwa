@@ -15,7 +15,7 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 np.random.seed(1)
 
 n = 3  # num cars
-N = 8  # controller horizon
+N = 10  # controller horizon
 w = 1e4  # slack variable penalty
 
 ep_len = 50  # length of episode (sim len)
@@ -197,7 +197,7 @@ class TrackingSequentialMldCoordinator(MldAgent):
 
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n), max_episode_steps=ep_len))
+env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
 # coordinator
 local_mpcs: list[MpcMld] = []
 for i in range(n):
@@ -217,5 +217,6 @@ else:
     R = np.squeeze(env.ep_rewards)
 
 print(f"Return = {sum(R.squeeze())}")
+print(f"Violations = {env.unwrapped.viol_counter}")
 
-plot_fleet(n, X, U, R, leader_state)
+plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])

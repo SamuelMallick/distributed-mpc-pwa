@@ -152,7 +152,7 @@ class TrackingMldAgent(MldAgent):
 
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n), max_episode_steps=ep_len))
+env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
 # mld mpc
 mld_mpc = MPCMldCent(cent_system, N)
 # initialise the cost with the first tracking point
@@ -171,5 +171,6 @@ else:
     R = np.squeeze(env.ep_rewards)
 
 print(f"Return = {sum(R.squeeze())}")
+print(f"Violations = {env.unwrapped.viol_counter}")
 
-plot_fleet(n, X, U, R, leader_state)
+plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
