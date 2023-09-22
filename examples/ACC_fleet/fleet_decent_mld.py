@@ -14,8 +14,8 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(1)
 
-n = 3  # num cars
-N = 10  # controller horizon
+n = 2  # num cars
+N = 5  # controller horizon
 w = 1e4  # slack variable penalty
 
 ep_len = 100  # length of episode (sim len)
@@ -49,7 +49,12 @@ class LocalMpcMld(MpcMld):
         super().__init__(system, N)
 
         # extra constraints
-        self.s = self.mpc_model.addMVar((1, N + 1), lb=0, ub=float("inf"), name="s")
+        self.s_ahead = self.mpc_model.addMVar(
+            (1, N + 1), lb=0, ub=float("inf"), name="s_ahead"
+        )
+        self.s_behind = self.mpc_model.addMVar(
+            (1, N + 1), lb=0, ub=float("inf"), name="s_behind"
+        )
         self.safety_constraints_ahead = []
         self.safety_constraints_behind = []
         for k in range(N):
@@ -65,26 +70,26 @@ class LocalMpcMld(MpcMld):
             # safe distance constraints - RHS updated each timestep by coordinator
             self.safety_constraints_ahead.append(  # for car in front
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"),
+                    self.x[0, [k]] - self.s_ahead[:, [k]] <= float("inf"),
                     name=f"safety_ahead_{k}",
                 )
             )
 
             self.safety_constraints_behind.append(  # for car behind
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] + self.s[:, [k]] >= -float("inf"),
+                    self.x[0, [k]] + self.s_behind[:, [k]] >= -float("inf"),
                     name=f"safety_behind_{k}",
                 )
             )
         self.safety_constraints_ahead.append(
             self.mpc_model.addConstr(
-                self.x[0, [N]] - self.s[:, [N]] <= float("inf"),
+                self.x[0, [N]] - self.s_ahead[:, [N]] <= float("inf"),
                 name=f"safety_ahead_{N}",
             )
         )
         self.safety_constraints_behind.append(  # for car behind
             self.mpc_model.addConstr(
-                self.x[0, [N]] + self.s[:, [N]] >= -float("inf"),
+                self.x[0, [N]] + self.s_behind[:, [N]] >= -float("inf"),
                 name=f"safety_behind_{k}",
             )
         )
@@ -167,17 +172,16 @@ class TrackingDecentMldCoordinator(MldAgent):
                         - desired_sep
                     )
                     + self.agents[i].mpc.u[:, k] @ Q_u_l @ self.agents[i].mpc.u[:, [k]]
-                    + w * self.agents[i].mpc.s[:, [k]]
+                    + w * self.agents[i].mpc.s_ahead[:, [k]]
+                    + w * self.agents[i].mpc.s_behind[:, [k]]
                 )
             obj += (
-                self.agents[i].mpc.x[:, N] - x_pred_ahead[:, N] - desired_sep.T
-            ) @ Q_x_l @ (
-                self.agents[i].mpc.x[:, [N]] - x_pred_ahead[:, [N]] - desired_sep
-            ) + w * self.agents[
-                i
-            ].mpc.s[
-                :, [N]
-            ]
+                (self.agents[i].mpc.x[:, N] - x_pred_ahead[:, N] - desired_sep.T)
+                @ Q_x_l
+                @ (self.agents[i].mpc.x[:, [N]] - x_pred_ahead[:, [N]] - desired_sep)
+                + w * self.agents[i].mpc.s_ahead[:, [N]]
+                + w * self.agents[i].mpc.s_behind[:, [N]]
+            )
             self.agents[i].mpc.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
     def extrapolate_position(self, initial_pos, initial_vel):
