@@ -27,8 +27,8 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     def reset(
         self,
         *,
-        seed: int | None = None,
-        options: dict[str, Any] | None = None,
+        seed: int = None,
+        options: dict[str, Any] = None,
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
@@ -50,7 +50,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self, state: npt.NDArray[np.floating], action: npt.NDArray[np.floating]
     ) -> float:
         """Computes the stage cost `L(s,a)`."""
-
+        # TODO count OR penalise constraint violations in environment
         cost = 0
         for i in range(self.n):
             local_state = state[self.nx_l * i : self.nx_l * (i + 1), :]

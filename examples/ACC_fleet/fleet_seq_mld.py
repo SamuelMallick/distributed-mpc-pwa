@@ -14,11 +14,11 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(1)
 
-n = 2  # num cars
-N = 5  # controller horizon
-w = 100  # slack variable penalty
+n = 3  # num cars
+N = 8  # controller horizon
+w = 1e4  # slack variable penalty
 
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -50,7 +50,8 @@ class LocalMpcMld(MpcMld):
 
         # extra constraints
         self.s = self.mpc_model.addMVar((1, N + 1), lb=0, ub=float("inf"), name="s")
-        self.safety_constraints = []
+        self.safety_constraints_ahead = []
+        self.safety_constraints_behind = []
         for k in range(N):
             # accel cnstrs
             self.mpc_model.addConstr(
@@ -62,14 +63,29 @@ class LocalMpcMld(MpcMld):
                 name=f"dec_{k}",
             )
             # safe distance constraints - RHS updated each timestep by coordinator
-            self.safety_constraints.append(
+            self.safety_constraints_ahead.append(  # for car in front
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"), name=f"safety_{k}"
+                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"),
+                    name=f"safety_ahead_{k}",
                 )
             )
-        self.safety_constraints.append(
+
+            self.safety_constraints_behind.append(  # for car behind
+                self.mpc_model.addConstr(
+                    self.x[0, [k]] + self.s[:, [k]] >= -float("inf"),
+                    name=f"safety_behind_{k}",
+                )
+            )
+        self.safety_constraints_ahead.append(
             self.mpc_model.addConstr(
-                self.x[0, [N]] - self.s[:, [N]] <= float("inf"), name=f"safety_{N}"
+                self.x[0, [N]] - self.s[:, [N]] <= float("inf"),
+                name=f"safety_ahead_{N}",
+            )
+        )
+        self.safety_constraints_behind.append(  # for car behind
+            self.mpc_model.addConstr(
+                self.x[0, [N]] + self.s[:, [N]] >= -float("inf"),
+                name=f"safety_behind_{k}",
             )
         )
 
@@ -78,14 +94,6 @@ class TrackingSequentialMldCoordinator(MldAgent):
     def __init__(
         self,
         local_mpcs: list[MpcMld],
-        nx_l: int,
-        nu_l: int,
-        Q_x_l: np.ndarray,
-        Q_u_l: np.ndarray,
-        sep: np.ndarray,
-        d_safe: float,
-        w: float,
-        N: int,
     ) -> None:
         """Initialise the coordinator.
 
@@ -110,16 +118,10 @@ class TrackingSequentialMldCoordinator(MldAgent):
         N: int
             Prediction horizon.
         """
-        self._exploration: ExplorationStrategy = NoExploration()  # to keep compatable
+        self._exploration: ExplorationStrategy = (
+            NoExploration()
+        )  # to keep compatable with Agent class
         self.n = len(local_mpcs)
-        self.nx_l = nx_l
-        self.nu_l = nu_l
-        self.Q_x_l = Q_x_l
-        self.Q_u_l = Q_u_l
-        self.sep = sep
-        self.d_safe = d_safe
-        self.w = w
-        self.N = N
         self.agents: list[MldAgent] = []
         for i in range(self.n):
             self.agents.append(MldAgent(local_mpcs[i]))
@@ -127,51 +129,62 @@ class TrackingSequentialMldCoordinator(MldAgent):
     def get_control(self, state):
         u = [None] * self.n
         for i in range(self.n):
-            xl = state[self.nx_l * i : self.nx_l * (i + 1), :]
-            if i != 0:
-                x_pred_prev = self.agents[i - 1].x_pred
-                x_goal = x_pred_prev + np.tile(self.sep, self.N + 1)
-                for k in range(self.N + 1):
-                    self.agents[i].mpc.safety_constraints[k].RHS = (
-                        x_pred_prev[0, [k]] - self.d_safe
+            xl = state[nx_l * i : nx_l * (i + 1), :]  # pull out local part of state
+
+            # get predicted state of car in front
+            if i != 0:  # first car has no car in front
+                x_pred_ahead = self.agents[i - 1].get_predicted_state(shifted=False)
+
+                # set distance constraint for car ahead
+                for k in range(N + 1):
+                    self.agents[i].mpc.safety_constraints_ahead[k].RHS = (
+                        x_pred_ahead[0, [k]] - d_safe
                     )
 
-                # set cost of agent
-                self.agents[i].set_cost(self.Q_x_l, self.Q_u_l, x_goal)
+                # set cost of tracking car ahead
                 obj = 0
-                for k in range(self.N):
+                for k in range(N):
                     obj += (
-                        (self.agents[i].mpc.x[:, k] - x_pred_prev[:, k] - self.sep.T)
-                        @ self.Q_x_l
-                        @ (
-                            self.agents[i].mpc.x[:, [k]]
-                            - x_pred_prev[:, [k]]
-                            - self.sep
-                        )
+                        (self.agents[i].mpc.x[:, k] - x_pred_ahead[:, k] - sep.T)
+                        @ Q_x_l
+                        @ (self.agents[i].mpc.x[:, [k]] - x_pred_ahead[:, [k]] - sep)
                         + self.agents[i].mpc.u[:, k]
-                        @ self.Q_u_l
+                        @ Q_u_l
                         @ self.agents[i].mpc.u[:, [k]]
-                        + self.w * self.agents[i].mpc.s[:, [k]]
+                        + w * self.agents[i].mpc.s[:, [k]]
                     )
                 obj += (
-                    self.agents[i].mpc.x[:, self.N]
-                    - x_pred_prev[:, self.N]
-                    - self.sep.T
-                ) @ self.Q_x_l @ (
-                    self.agents[i].mpc.x[:, [self.N]]
-                    - x_pred_prev[:, [self.N]]
-                    - self.sep
-                ) + self.w * self.agents[
+                    self.agents[i].mpc.x[:, N] - x_pred_ahead[:, N] - sep.T
+                ) @ Q_x_l @ (
+                    self.agents[i].mpc.x[:, [N]] - x_pred_ahead[:, [N]] - sep
+                ) + w * self.agents[
                     i
                 ].mpc.s[
-                    :, [self.N]
+                    :, [N]
                 ]
                 self.agents[i].mpc.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
+
+            # get predicted state of car behind
+            if i != n - 1:  # last car has no car behind
+                x_pred_behind = self.agents[i + 1].get_predicted_state(shifted=True)
+                if (
+                    x_pred_behind is not None
+                ):  # it will be None if first iteration and car behind has no saved solution
+                    # apply a smart shifting, where the final position assumed a constant velocity
+                    x_pred_behind[0, -1] = (
+                        x_pred_behind[0, -2] + acc.ts * x_pred_behind[1, -1]
+                    )
+
+                    # set distance constraint for car ahead
+                    for k in range(N + 1):
+                        self.agents[i].mpc.safety_constraints_behind[k].RHS = (
+                            x_pred_behind[0, [k]] + d_safe
+                        )
 
             u[i] = self.agents[i].get_control(xl)
         return np.vstack(u)
 
-    # here we only set the leader, because the solutions are communicated down the sequence to other agents
+    # here we set the leader cost because it is independent of other vehicles' states
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         x_goal = leader_state[:, timestep : timestep + N + 1]
         self.agents[0].set_cost(Q_x_l, Q_u_l, x_goal)
@@ -190,9 +203,7 @@ local_mpcs: list[MpcMld] = []
 for i in range(n):
     # passing local system
     local_mpcs.append(LocalMpcMld(system, N))
-agent = TrackingSequentialMldCoordinator(
-    local_mpcs, nx_l, nu_l, Q_x_l, Q_u_l, sep, d_safe, w, N
-)
+agent = TrackingSequentialMldCoordinator(local_mpcs)
 
 agent.evaluate(env=env, episodes=1, seed=1)
 

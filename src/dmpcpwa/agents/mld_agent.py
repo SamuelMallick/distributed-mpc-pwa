@@ -93,3 +93,15 @@ class MldAgent(Agent):
         If x_goal or u_goal passed the cost uses (x-x_goal) and (u_goal)"""
 
         self.mpc.set_cost(Q_x, Q_u, x_goal, u_goal)
+
+    def get_predicted_state(self, shifted=False) -> np.ndarray:
+        """Returns the predicted state trajectory from the most recent solve of the local MPC.
+        If shifted is true, the sequence is shifted by one, with the final time step duplicated.
+        If no mpc has been solved, the returned value will be none."""
+        if shifted and self.x_pred is not None:
+            x_pred_shifted = self.x_pred.copy()
+            return np.concatenate(
+                (x_pred_shifted[:, 1:], x_pred_shifted[:, -1:]), axis=1
+            )
+        else:
+            return self.x_pred

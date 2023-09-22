@@ -16,9 +16,9 @@ np.random.seed(1)
 
 n = 2  # num cars
 N = 5  # controller horizon
-w = 100  # slack variable penalty
+w = 1e4  # slack variable penalty
 
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling

@@ -1,3 +1,4 @@
+import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
@@ -15,7 +16,7 @@ np.random.seed(1)
 
 n = 2  # num cars
 N = 5  # controller horizon
-w = 100  # slack variable penalty
+w = 1e4  # slack variable penalty
 
 ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
@@ -49,7 +50,8 @@ class LocalMpcMld(MpcMld):
 
         # extra constraints
         self.s = self.mpc_model.addMVar((1, N + 1), lb=0, ub=float("inf"), name="s")
-        self.safety_constraints = []
+        self.safety_constraints_ahead = []
+        self.safety_constraints_behind = []
         for k in range(N):
             # accel cnstrs
             self.mpc_model.addConstr(
@@ -61,14 +63,29 @@ class LocalMpcMld(MpcMld):
                 name=f"dec_{k}",
             )
             # safe distance constraints - RHS updated each timestep by coordinator
-            self.safety_constraints.append(
+            self.safety_constraints_ahead.append(  # for car in front
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"), name=f"safety_{k}"
+                    self.x[0, [k]] - self.s[:, [k]] <= float("inf"),
+                    name=f"safety_ahead_{k}",
                 )
             )
-        self.safety_constraints.append(
+
+            self.safety_constraints_behind.append(  # for car behind
+                self.mpc_model.addConstr(
+                    self.x[0, [k]] + self.s[:, [k]] >= -float("inf"),
+                    name=f"safety_behind_{k}",
+                )
+            )
+        self.safety_constraints_ahead.append(
             self.mpc_model.addConstr(
-                self.x[0, [N]] - self.s[:, [N]] <= float("inf"), name=f"safety_{N}"
+                self.x[0, [N]] - self.s[:, [N]] <= float("inf"),
+                name=f"safety_ahead_{N}",
+            )
+        )
+        self.safety_constraints_behind.append(  # for car behind
+            self.mpc_model.addConstr(
+                self.x[0, [N]] + self.s[:, [N]] >= -float("inf"),
+                name=f"safety_behind_{k}",
             )
         )
 
@@ -102,33 +119,75 @@ class TrackingDecentMldCoordinator(MldAgent):
 
     def observe_states(self, env, timestep):
         for i in range(n):
-            predicted_pos = np.zeros((1, N + 1))
-            predicted_vel = np.zeros((1, N + 1))
             if i == 0:  # lead car
-                predicted_pos[:, [0]] = leader_state[0, [timestep]]
-                predicted_vel[:, [0]] = leader_state[1, [timestep]]
+                x_pred_ahead = self.extrapolate_position(
+                    leader_state[0, [timestep]], leader_state[1, [timestep]]
+                )
+                x_pred_behind = self.extrapolate_position(
+                    env.x[nx_l * (i + 1), :], env.x[nx_l * (i + 1) + 1, :]
+                )
+            elif i == n - 1:  # last car
+                x_pred_ahead = self.extrapolate_position(
+                    env.x[nx_l * (i - 1), :], env.x[nx_l * (i - 1) + 1, :]
+                )
+                x_pred_behind = None, None
             else:
-                predicted_pos[:, [0]] = env.x[nx_l * (i - 1), :]
-                predicted_vel[:, [0]] = env.x[nx_l * (i - 1) + 1, :]
-            for k in range(N):
-                predicted_pos[:, [k + 1]] = (
-                    predicted_pos[:, [k]] + acc.ts * predicted_vel[:, [k]]
+                x_pred_ahead = self.extrapolate_position(
+                    env.x[nx_l * (i - 1), :], env.x[nx_l * (i - 1) + 1, :]
                 )
-                predicted_vel[:, [k + 1]] = predicted_vel[:, [k]]
-
-                self.agents[i].mpc.safety_constraints[k].RHS = (
-                    predicted_pos[0, [k]] - d_safe
+                x_pred_behind = self.extrapolate_position(
+                    env.x[nx_l * (i + 1), :], env.x[nx_l * (i + 1) + 1, :]
                 )
-            self.agents[i].mpc.safety_constraints[N].RHS = (
-                predicted_pos[0, [N]] - d_safe
-            )
 
+            if i != 0:  # add front distance constraint if not front car
+                for k in range(N + 1):
+                    self.agents[i].mpc.safety_constraints_ahead[k].RHS = (
+                        x_pred_ahead[0, [k]] - d_safe
+                    )
+            if i != n - 1:  # add beack distance constraint if not rear car
+                for k in range(N + 1):
+                    self.agents[i].mpc.safety_constraints_behind[k].RHS = (
+                        x_pred_behind[0, [k]] + d_safe
+                    )
+
+            # set costs
             if i == 0:
-                x_goal = np.vstack([predicted_pos, predicted_vel])
+                desired_sep = np.zeros((nx_l, 1))
             else:
-                x_goal = np.vstack([predicted_pos, predicted_vel]) + np.tile(sep, N + 1)
+                desired_sep = sep
 
-            self.agents[i].set_cost(Q_x_l, Q_u_l, x_goal=x_goal)
+            obj = 0
+            for k in range(N):
+                obj += (
+                    (self.agents[i].mpc.x[:, k] - x_pred_ahead[:, k] - desired_sep.T)
+                    @ Q_x_l
+                    @ (
+                        self.agents[i].mpc.x[:, [k]]
+                        - x_pred_ahead[:, [k]]
+                        - desired_sep
+                    )
+                    + self.agents[i].mpc.u[:, k] @ Q_u_l @ self.agents[i].mpc.u[:, [k]]
+                    + w * self.agents[i].mpc.s[:, [k]]
+                )
+            obj += (
+                self.agents[i].mpc.x[:, N] - x_pred_ahead[:, N] - desired_sep.T
+            ) @ Q_x_l @ (
+                self.agents[i].mpc.x[:, [N]] - x_pred_ahead[:, [N]] - desired_sep
+            ) + w * self.agents[
+                i
+            ].mpc.s[
+                :, [N]
+            ]
+            self.agents[i].mpc.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
+
+    def extrapolate_position(self, initial_pos, initial_vel):
+        x_pred = np.zeros((nx_l, N + 1))
+        x_pred[0, [0]] = initial_pos
+        x_pred[1, [0]] = initial_vel
+        for k in range(N):
+            x_pred[0, [k + 1]] = x_pred[0, [k]] + acc.ts * x_pred[1, [k]]
+            x_pred[1, [k + 1]] = x_pred[1, [k]]
+        return x_pred
 
 
 # env
