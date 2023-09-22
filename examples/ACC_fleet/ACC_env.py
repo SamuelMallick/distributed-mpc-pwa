@@ -11,7 +11,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     """A fleet of non-linear hybrid vehicles who track each other."""
 
     step_counter = 0
-    viol_counter = []   # count constraint violations for each ep
+    viol_counter = []  # count constraint violations for each ep
 
     def __init__(self, acc: ACC, n: int, ep_len: int) -> None:
         self.acc = acc
@@ -48,7 +48,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
             starting_positions.remove(init_pos)
 
         self.step_counter = 0
-        self.viol_counter.append(np.zeros((self.ep_len)))
+        self.viol_counter.append(np.zeros(self.ep_len))
         return self.x, {}
 
     def get_stage_cost(
@@ -73,13 +73,12 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
                 cost += (local_state - follow_state - self.sep).T @ self.Q_x_l @ (
                     local_state - follow_state - self.sep
                 ) + local_action.T @ self.Q_u_l @ local_action
-        
+
             # check for constraint violations
-            if i < self.n-1:
-                local_state_behind = state[self.nx_l * (i+1) : self.nx_l * (i + 2), :]
+            if i < self.n - 1:
+                local_state_behind = state[self.nx_l * (i + 1) : self.nx_l * (i + 2), :]
                 if local_state[0] - local_state_behind[0] < self.acc.d_safe:
                     self.viol_counter[-1][self.step_counter] = 100
-
 
         return cost
 

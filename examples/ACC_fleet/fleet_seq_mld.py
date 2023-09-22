@@ -107,22 +107,6 @@ class TrackingSequentialMldCoordinator(MldAgent):
         ----------
         local_mpcs: List[MpcMld]
             List of local MLD based MPCs - one for each agent.
-        nx_l: int
-            Dimension of local state.
-        nu_l: int
-            Dimension of local control.
-        Q_x_l: np.ndarray
-            Quadratic penalty matrix for state tracking.
-        Q_u_l: np.ndarray
-            Quadratic penalty matrix for control effort.
-        sep: np.ndarray
-            Desired state seperation between tracked vehicles.
-        d_safe: float
-            Safe distance between vehicles.
-        w: float
-            Penalty on slack var s in cost.
-        N: int
-            Prediction horizon.
         """
         self._exploration: ExplorationStrategy = (
             NoExploration()

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 nx_l = 2
 
 
-def plot_fleet(n, X, U, R, leader_state, violations = None):
+def plot_fleet(n, X, U, R, leader_state, violations=None):
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     for i in range(n):
         axs[0].plot(X[:, nx_l * i])

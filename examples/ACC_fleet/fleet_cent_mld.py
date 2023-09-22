@@ -14,7 +14,7 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 2  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 w = 1e4  # slack variable penalty
 
