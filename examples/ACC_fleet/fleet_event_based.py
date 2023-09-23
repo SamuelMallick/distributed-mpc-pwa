@@ -15,11 +15,11 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 4  # num cars
+n = 3  # num cars
 N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
-ep_len = 50  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -76,17 +76,25 @@ class LocalMpc(MpcMld):
     ) -> None:
         super().__init__(system, N)
 
+        self.pos_in_fleet = pos_in_fleet
+        self.num_vehicles = num_vehicles
         # the index of the local vehicles position is different if it is the leader or trailer
         if pos_in_fleet == 1:
             my_index = 0
             b_index = 2
+            self.b_index = b_index
         elif pos_in_fleet == num_vehicles:
             my_index = 2
             f_index = 0
+            self.f_index = f_index
         else:
             my_index = 2
             f_index = 0
             b_index = 4
+            self.f_index = f_index
+            self.b_index = b_index
+        self.my_index = my_index
+
         # constraints and slacks for cars in front
         if pos_in_fleet > 1:
             self.s_front = self.mpc_model.addMVar(
@@ -111,7 +119,7 @@ class LocalMpc(MpcMld):
                         >= d_safe - self.s_front_2[:, [k]],
                         name=f"safety_ahead_2_{k}",
                     )
-        else:  # leader
+        if pos_in_fleet <= 2:  # leader and its follower
             self.ref_traj = self.mpc_model.addMVar(
                 (nx_l, N + 1), lb=0, ub=0, name="ref_traj"
             )
@@ -160,7 +168,7 @@ class LocalMpc(MpcMld):
 
         # set local cost
         obj = 0
-        # position tracking portions of cost
+        # front position tracking portions of cost
         if pos_in_fleet > 1:
             for k in range(N + 1):
                 obj += (
@@ -192,25 +200,64 @@ class LocalMpc(MpcMld):
                             - sep
                         )
                     ) + w * self.s_front_2[:, [k]]
-        else:  # leader
+        if pos_in_fleet == 1:  # leader
             for k in range(N + 1):
                 obj += (
-                    (self.x[my_index : my_index + 2, k] - self.ref_traj[:, k] - sep.T)
+                    (
+                        self.x[my_index : my_index + 2, k]
+                        - self.ref_traj[:, k]
+                        - np.zeros((nx_l, 1)).T
+                    )
                     @ Q_x_l
                     @ (
                         self.x[my_index : my_index + 2, [k]]
                         - self.ref_traj[:, [k]]
-                        - sep
+                        - np.zeros((nx_l, 1))
+                    )
+                )
+        if pos_in_fleet == 2:  # follower of leader
+            for k in range(N + 1):
+                obj += (
+                    (
+                        self.x[f_index : f_index + 2, k]
+                        - self.ref_traj[:, k]
+                        - np.zeros((nx_l, 1)).T
+                    )
+                    @ Q_x_l
+                    @ (
+                        self.x[f_index : f_index + 2, [k]]
+                        - self.ref_traj[:, [k]]
+                        - np.zeros((nx_l, 1))
                     )
                 )
 
         # slacks for vehicles behind
         if num_vehicles - pos_in_fleet >= 1:
             for k in range(N + 1):
-                obj += w * self.s_back[:, [k]]
+                obj += (
+                    (
+                        self.x[b_index : b_index + 2, k]
+                        - self.x[my_index : my_index + 2, k]
+                        - sep.T
+                    )
+                    @ Q_x_l
+                    @ (
+                        self.x[b_index : b_index + 2, [k]]
+                        - self.x[my_index : my_index + 2, [k]]
+                        - sep
+                    )
+                ) + w * self.s_back[:, [k]]
             if num_vehicles - pos_in_fleet >= 2:
                 for k in range(N + 1):
-                    obj += w * self.s_back_2[:, [k]]
+                    obj += (
+                        (self.x_back_2[:, k] - self.x[b_index : b_index + 2, k] - sep.T)
+                        @ Q_x_l
+                        @ (
+                            self.x_back_2[:, [k]]
+                            - self.x[b_index : b_index + 2, [k]]
+                            - sep
+                        )
+                    ) + w * self.s_back_2[:, [k]]
 
         # control penalty in cost
         for i in range(self.u.shape[0]):
@@ -233,6 +280,31 @@ class LocalMpc(MpcMld):
         for k in range(N + 1):
             self.x_back_2[:, [k]].lb = x_back_2[:, [k]]
             self.x_back_2[:, [k]].ub = x_back_2[:, [k]]
+
+    def eval_cost(self, x, u):
+        # set the bounds of the vars in the model to fix the vals
+        for k in range(
+            N
+        ):  # we dont constain the N+1th state, as it is defined by shifted control
+            self.x[:, [k]].ub = x[:, [k]]
+            self.x[:, [k]].lb = x[:, [k]]
+        self.u.ub = u
+        self.u.lb = u
+        self.IC.RHS = x[:, [0]]
+        self.mpc_model.optimize()
+        if self.mpc_model.Status == 2:  # check for successful solve
+            cost = self.mpc_model.objVal
+        else:
+            cost = float("inf")  # infinite cost if infeasible
+        return cost
+
+    def solve_mpc(self, state):
+        # the solve method is overridden so that the bounds on the vars are set back to normal before solving.
+        self.x.ub = float("inf")
+        self.x.lb = -float("inf")
+        self.u.ub = float("inf")
+        self.u.lb = -float("inf")
+        return super().solve_mpc(state)
 
 
 class TrackingEventBasedCoordinator(MldAgent):
@@ -260,17 +332,46 @@ class TrackingEventBasedCoordinator(MldAgent):
         self.control_guesses = [np.zeros((nu_l, N)) for i in range(n)]
 
     def get_control(self, state):
-        u = [None] * self.n
+        [None] * self.n
 
+        temp_costs = [None] * self.n
         for iter in range(1):
+            best_cost_dec = -float("inf")
+            best_idx = -1  # gets set to an agent index if there is a cost improvement
             for i in range(self.n):
-                # get local initial condition
+                # get local initial condition and local initial guesses
                 if i == 0:
                     x_l = state[nx_l * i : nx_l * (i + 2), :]
+                    x_guess = np.vstack(
+                        (self.state_guesses[i], self.state_guesses[i + 1])
+                    )
+                    u_guess = np.vstack(
+                        (self.control_guesses[i], self.control_guesses[i + 1])
+                    )
                 elif i == n - 1:
                     x_l = state[nx_l * (i - 1) : nx_l * (i + 1), :]
+                    x_guess = np.vstack(
+                        (self.state_guesses[i - 1], self.state_guesses[i])
+                    )
+                    u_guess = np.vstack(
+                        (self.control_guesses[i - 1], self.control_guesses[i])
+                    )
                 else:
                     x_l = state[nx_l * (i - 1) : nx_l * (i + 2), :]
+                    x_guess = np.vstack(
+                        (
+                            self.state_guesses[i - 1],
+                            self.state_guesses[i],
+                            self.state_guesses[i + 1],
+                        )
+                    )
+                    u_guess = np.vstack(
+                        (
+                            self.control_guesses[i - 1],
+                            self.control_guesses[i],
+                            self.control_guesses[i + 1],
+                        )
+                    )
 
                 # set the constant predictions for neighbors of neighbors
                 if i > 1:
@@ -278,14 +379,57 @@ class TrackingEventBasedCoordinator(MldAgent):
                 if i < n - 2:
                     self.agents[i].mpc.set_x_back_2(self.state_guesses[i + 2])
 
-        return np.vstack(u)
+                temp_costs[i] = self.agents[i].mpc.eval_cost(x_guess, u_guess)
+                self.agents[i].get_control(x_l)
+                new_cost = self.agents[i].get_predicted_cost()
+                if temp_costs[i] - new_cost > best_cost_dec:
+                    best_cost_dec = temp_costs[i] - new_cost
+                    best_idx = i
+
+        # update state and control guesses based on the winner
+        if best_idx >= 0:
+            best_x = self.agents[best_idx].x_pred
+            best_u = self.agents[best_idx].u_pred
+            if best_idx == 0:
+                self.state_guesses[0] = best_x[0:2, :]
+                self.state_guesses[1] = best_x[2:4, :]
+                self.control_guesses[0] = best_u[[0], :]
+                self.control_guesses[1] = best_u[[1], :]
+            elif best_idx == n - 1:
+                self.state_guesses[n - 2] = best_x[0:2, :]
+                self.state_guesses[n - 1] = best_x[2:4, :]
+                self.control_guesses[n - 2] = best_u[[0], :]
+                self.control_guesses[n - 1] = best_u[[1], :]
+            else:
+                self.state_guesses[best_idx - 1] = best_x[0:2, :]
+                self.state_guesses[best_idx] = best_x[2:4, :]
+                self.state_guesses[best_idx + 1] = best_x[4:6, :]
+                self.control_guesses[best_idx - 1] = best_u[[0], :]
+                self.control_guesses[best_idx] = best_u[[1], :]
+                self.control_guesses[best_idx + 1] = best_u[[2], :]
+
+        return np.vstack([self.control_guesses[i][:, [0]] for i in range(n)])
 
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         self.agents[0].mpc.set_leader_traj(leader_state[:, timestep : timestep + N + 1])
+        self.agents[1].mpc.set_leader_traj(leader_state[:, timestep : timestep + N + 1])
+
+
+        # shift previous solutions to be initial guesses at next step
+        for i in range(n):
+            self.state_guesses[i] = np.concatenate(
+                (self.state_guesses[i][:, 1:], self.state_guesses[i][:, -1:]),
+                axis=1,
+            )
+            self.control_guesses[i] = np.concatenate(
+                (self.control_guesses[i][:, 1:], self.control_guesses[i][:, -1:]),
+                axis=1,
+            )
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
         self.agents[0].mpc.set_leader_traj(leader_state[:, 0 : N + 1])
+        self.agents[1].mpc.set_leader_traj(leader_state[:, 0 : N + 1])
 
         # initialise first step guesses with extrapolating positions
         for i in range(self.n):

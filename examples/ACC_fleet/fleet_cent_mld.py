@@ -15,7 +15,7 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 np.random.seed(1)
 
 n = 3  # num cars
-N = 5  # controller horizon
+N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
 ep_len = 50  # length of episode (sim len)
