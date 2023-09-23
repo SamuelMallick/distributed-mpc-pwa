@@ -14,11 +14,11 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(1)
 
-n = 3  # num cars
-N = 8  # controller horizon
+n = 5  # num cars
+N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
-ep_len = 50  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling

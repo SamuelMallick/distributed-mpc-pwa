@@ -15,9 +15,11 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 5  # num cars
+n = 4  # num cars
 N = 3  # controller horizon
 w = 1e4  # slack variable penalty
+
+threshold = 1  # cost improvement must be more than this to consider communication
 
 ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
@@ -335,7 +337,7 @@ class TrackingEventBasedCoordinator(MldAgent):
         [None] * self.n
 
         temp_costs = [None] * self.n
-        for iter in range(10):
+        for iter in range(4):
             best_cost_dec = -float("inf")
             best_idx = -1  # gets set to an agent index if there is a cost improvement
             for i in range(self.n):
@@ -382,7 +384,9 @@ class TrackingEventBasedCoordinator(MldAgent):
                 temp_costs[i] = self.agents[i].mpc.eval_cost(x_guess, u_guess)
                 self.agents[i].get_control(x_l)
                 new_cost = self.agents[i].get_predicted_cost()
-                if temp_costs[i] - new_cost > best_cost_dec:
+                if (temp_costs[i] - new_cost > best_cost_dec) and (
+                    temp_costs[i] - new_cost > threshold
+                ):
                     best_cost_dec = temp_costs[i] - new_cost
                     best_idx = i
 
@@ -407,13 +411,14 @@ class TrackingEventBasedCoordinator(MldAgent):
                     self.control_guesses[best_idx - 1] = best_u[[0], :]
                     self.control_guesses[best_idx] = best_u[[1], :]
                     self.control_guesses[best_idx + 1] = best_u[[2], :]
+            else:  # don't repeat the repetitions if no-one improved cost
+                break
 
         return np.vstack([self.control_guesses[i][:, [0]] for i in range(n)])
 
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         self.agents[0].mpc.set_leader_traj(leader_state[:, timestep : timestep + N + 1])
         self.agents[1].mpc.set_leader_traj(leader_state[:, timestep : timestep + N + 1])
-
 
         # shift previous solutions to be initial guesses at next step
         for i in range(n):

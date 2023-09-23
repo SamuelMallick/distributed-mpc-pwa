@@ -211,9 +211,9 @@ class MpcMld:
 
         # construct zero goal points if not passed
         if x_goal is None:
-            x_goal = np.zeros((self.x[:, [0]].shape[0], self.N))
+            x_goal = np.zeros((self.x[:, [0]].shape[0], self.N + 1))
         if u_goal is None:
-            u_goal = np.zeros((self.u[:, [0]].shape[0], self.N))
+            u_goal = np.zeros((self.u[:, [0]].shape[0], self.N + 1))
 
         obj = 0
         for k in range(self.N):

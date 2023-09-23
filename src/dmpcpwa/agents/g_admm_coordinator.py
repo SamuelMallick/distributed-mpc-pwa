@@ -12,7 +12,7 @@ from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
 
-ADMM_DEBUG_PLOT = False
+ADMM_DEBUG_PLOT = True
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -26,7 +26,7 @@ logger.addHandler(console_handler)
 class GAdmmCoordinator(Agent):
     """Coordinates the greedy ADMM algorithm for PWA agents"""
 
-    admm_iters = 100
+    admm_iters = 50
 
     def __init__(
         self,
@@ -77,7 +77,7 @@ class GAdmmCoordinator(Agent):
         self.nu_l = local_mpcs[0].nu_l
 
         # previous time_steps solution stored in warm start
-        self.warm_start = [np.zeros((self.nu_l, self.N)) for i in range(self.n)]
+        # self.warm_start = [np.zeros((self.nu_l, self.N)) for i in range(self.n)]
 
         # coordinator of ADMM using 1 iteration as g_admm coordinator checks sequences every ADMM iter
         self.admm_coordinator = AdmmCoordinator(
@@ -115,7 +115,7 @@ class GAdmmCoordinator(Agent):
                 agent.on_episode_start(env, episode)
 
             while not (truncated or terminated):
-                action, sol_list = self.g_admm_control(state, deterministic)
+                action, sol_list = self.g_admm_control(state)
                 for i in range(len(sol_list)):
                     if not sol_list[i].success:
                         self.agents[i].on_mpc_failure(
@@ -144,7 +144,7 @@ class GAdmmCoordinator(Agent):
             agent.on_validation_end(env, returns)
         return returns
 
-    def g_admm_control(self, state, deterministic):
+    def g_admm_control(self, state, warm_start=None):
         seqs = [[0] * self.N for i in range(self.n)]  # switching seqs for agents
 
         xc = [None] * self.n
@@ -153,9 +153,10 @@ class GAdmmCoordinator(Agent):
         # break global state into local pieces
         x = [state[self.nx_l * i : self.nx_l * (i + 1), :] for i in range(self.n)]
 
-        # TODO initial feasible control guess
-        # u = self.warm_start
-        u = [np.ones((self.nu_l, self.N)) for i in range(self.n)]
+        if warm_start is not None:
+            u = warm_start
+        else:
+            u = [np.zeros((self.nu_l, self.N)) for i in range(self.n)]
 
         # generate initial feasible coupling via dynamics rollout
         x_rout = self.dynamics_rollout(x, u)
@@ -216,10 +217,6 @@ class GAdmmCoordinator(Agent):
 
         if ADMM_DEBUG_PLOT:
             self.plot_admm_iters(u_plot_list, switch_plot_list)
-
-        # store solution for next warm start
-        # for i in range(self.n):
-        # self.warm_start[i] = u[i]
 
         return cs.DM(action_list), sol_list
 

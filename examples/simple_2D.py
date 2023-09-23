@@ -23,7 +23,7 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 from dmpcpwa.utils.pwa_models import cent_from_dist
 
-SIM_TYPE = "mld"  # options: "mld", "g_admm", "sqp_admm"
+SIM_TYPE = "g_admm"  # options: "mld", "g_admm", "sqp_admm"
 
 # create system
 
@@ -90,8 +90,8 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     def reset(
         self,
         *,
-        seed: int | None = None,
-        options: dict[str, Any] | None = None,
+        seed: int = None,
+        options: dict[str, Any] = None,
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)

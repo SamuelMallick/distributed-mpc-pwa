@@ -14,8 +14,8 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(1)
 
-n = 2  # num cars
-N = 5  # controller horizon
+n = 5  # num cars
+N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
 ep_len = 100  # length of episode (sim len)

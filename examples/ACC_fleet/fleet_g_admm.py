@@ -16,13 +16,11 @@ from dmpcpwa.mpc.mpc_switching import MpcSwitching
 
 np.random.seed(1)
 
-# TODO g_admm needs admm changed to agree on N+1 states in cost
-
 n = 2  # num cars
 N = 5  # controller horizon
-w = 100  # slack variable penalty
+w = 1e4  # slack variable penalty
 
-ep_len = 100  # length of episode (sim len)
+ep_len = 20  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -150,13 +148,13 @@ class LocalMpc(MpcSwitching):
                     @ Q_x_l
                     @ (x[:, [k]] - x_c[0:nx_l, [k]] - sep)
                     + u[:, [k]].T @ Q_u_l @ u[:, [k]]
-                    + w * s[:, [k]]
+                    # + w * s[:, [k]]
                     for k in range(N)
                 )
                 + (x[:, [N]] - x_c[0:nx_l, [N]] - sep).T
                 @ Q_x_l
                 @ (x[:, [N]] - x_c[0:nx_l, [N]] - sep)
-                + w * s[:, [N]]
+                # + w * s[:, [N]]
             )
 
         # solver
@@ -191,9 +189,17 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
         for k in range(N):  # we assume first agent is leader!
             self.agents[0].fixed_parameters[f"x_ref_{k}"] = leader_traj[:, [k]]
 
+    def g_admm_control(self, state, warm_start=None):
+        # set warm start for fleet: constant velocity
+        warm_start = [
+            acc.get_u_for_constant_vel(env.x[2 * i + 1, :]) * np.ones((nu_l, N))
+            for i in range(n)
+        ]
+        return super().g_admm_control(state, warm_start)
+
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n), max_episode_steps=ep_len))
+env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
 # distributed mpcs and params
 local_mpcs: list[LocalMpc] = []
 local_fixed_dist_parameters: list[dict] = []
