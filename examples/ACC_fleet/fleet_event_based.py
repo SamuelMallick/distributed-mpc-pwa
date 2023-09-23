@@ -15,7 +15,7 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 3  # num cars
+n = 5  # num cars
 N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
@@ -335,7 +335,7 @@ class TrackingEventBasedCoordinator(MldAgent):
         [None] * self.n
 
         temp_costs = [None] * self.n
-        for iter in range(1):
+        for iter in range(10):
             best_cost_dec = -float("inf")
             best_idx = -1  # gets set to an agent index if there is a cost improvement
             for i in range(self.n):
@@ -386,27 +386,27 @@ class TrackingEventBasedCoordinator(MldAgent):
                     best_cost_dec = temp_costs[i] - new_cost
                     best_idx = i
 
-        # update state and control guesses based on the winner
-        if best_idx >= 0:
-            best_x = self.agents[best_idx].x_pred
-            best_u = self.agents[best_idx].u_pred
-            if best_idx == 0:
-                self.state_guesses[0] = best_x[0:2, :]
-                self.state_guesses[1] = best_x[2:4, :]
-                self.control_guesses[0] = best_u[[0], :]
-                self.control_guesses[1] = best_u[[1], :]
-            elif best_idx == n - 1:
-                self.state_guesses[n - 2] = best_x[0:2, :]
-                self.state_guesses[n - 1] = best_x[2:4, :]
-                self.control_guesses[n - 2] = best_u[[0], :]
-                self.control_guesses[n - 1] = best_u[[1], :]
-            else:
-                self.state_guesses[best_idx - 1] = best_x[0:2, :]
-                self.state_guesses[best_idx] = best_x[2:4, :]
-                self.state_guesses[best_idx + 1] = best_x[4:6, :]
-                self.control_guesses[best_idx - 1] = best_u[[0], :]
-                self.control_guesses[best_idx] = best_u[[1], :]
-                self.control_guesses[best_idx + 1] = best_u[[2], :]
+            # update state and control guesses based on the winner
+            if best_idx >= 0:
+                best_x = self.agents[best_idx].x_pred
+                best_u = self.agents[best_idx].u_pred
+                if best_idx == 0:
+                    self.state_guesses[0] = best_x[0:2, :]
+                    self.state_guesses[1] = best_x[2:4, :]
+                    self.control_guesses[0] = best_u[[0], :]
+                    self.control_guesses[1] = best_u[[1], :]
+                elif best_idx == n - 1:
+                    self.state_guesses[n - 2] = best_x[0:2, :]
+                    self.state_guesses[n - 1] = best_x[2:4, :]
+                    self.control_guesses[n - 2] = best_u[[0], :]
+                    self.control_guesses[n - 1] = best_u[[1], :]
+                else:
+                    self.state_guesses[best_idx - 1] = best_x[0:2, :]
+                    self.state_guesses[best_idx] = best_x[2:4, :]
+                    self.state_guesses[best_idx + 1] = best_x[4:6, :]
+                    self.control_guesses[best_idx - 1] = best_u[[0], :]
+                    self.control_guesses[best_idx] = best_u[[1], :]
+                    self.control_guesses[best_idx + 1] = best_u[[2], :]
 
         return np.vstack([self.control_guesses[i][:, [0]] for i in range(n)])
 
