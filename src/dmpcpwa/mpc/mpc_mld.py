@@ -235,11 +235,13 @@ class MpcMld:
         if self.mpc_model.Status == 2:  # check for successful solve
             u = self.u.X
             x = self.x.X
+            cost = self.mpc_model.objVal
         else:
             u = np.zeros((self.m, self.N))
             x = np.zeros((self.n, self.N + 1))
+            cost = float('inf')
             logger.info("Infeasible")
 
         self.mpc_model.Runtime
         self.mpc_model.NodeCount
-        return u[:, [0]], x
+        return u[:, [0]], x, cost

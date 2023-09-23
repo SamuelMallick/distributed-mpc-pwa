@@ -21,6 +21,8 @@ class MldAgent(Agent):
         self._exploration: ExplorationStrategy = NoExploration()  # to keep compatable
         self.mpc = mpc
         self.x_pred = None  # stores most recent predicted state after being solved
+        self.u_pred = None  # stores most recent predicted control after being solved
+        self.cost_pred = None   # stores most recent predicted cost after being solved
 
     def evaluate(
         self,
@@ -83,8 +85,10 @@ class MldAgent(Agent):
         return returns
 
     def get_control(self, state):
-        u, x = self.mpc.solve_mpc(state)
+        u, x, cost = self.mpc.solve_mpc(state)
         self.x_pred = x
+        self.u_pred = u
+        self.cost_pred = cost
         return u
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
@@ -105,3 +109,7 @@ class MldAgent(Agent):
             )
         else:
             return self.x_pred
+        
+    def get_predicted_cost(self):
+        """Return cost of most recent MPC solution."""
+        return self.cost_pred
