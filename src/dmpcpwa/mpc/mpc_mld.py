@@ -239,9 +239,9 @@ class MpcMld:
         else:
             u = np.zeros((self.m, self.N))
             x = np.zeros((self.n, self.N + 1))
-            cost = float('inf')
+            cost = float("inf")
             logger.info("Infeasible")
 
         self.mpc_model.Runtime
         self.mpc_model.NodeCount
-        return u[:, [0]], x, cost
+        return u, x, cost
