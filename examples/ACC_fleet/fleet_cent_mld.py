@@ -1,3 +1,7 @@
+import datetime
+import pickle
+import sys
+
 import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
@@ -7,9 +11,7 @@ from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
-import sys
-import pickle
-import datetime
+
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.utils.pwa_models import cent_from_dist
@@ -106,12 +108,12 @@ class MPCMldCent(MpcMld):
                 temp_sep = sep
             for k in range(N):
                 obj += cost_func(
-                   local_state[:, [k]] - follow_state[:, [k]] - temp_sep, Q_x_l
+                    local_state[:, [k]] - follow_state[:, [k]] - temp_sep, Q_x_l
                 )
                 obj += cost_func(local_control[:, [k]], Q_u_l) + w * self.s[i, [k]]
             obj += (
-               cost_func(local_state[:, [N]] - follow_state[:, [N]] - temp_sep, Q_x_l)
-               + w * self.s[i, [N]]
+                cost_func(local_state[:, [N]] - follow_state[:, [N]] - temp_sep, Q_x_l)
+                + w * self.s[i, [N]]
             )
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
@@ -157,7 +159,7 @@ class TrackingMldAgent(MldAgent):
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         # time step starts from 1, so this will set the cost accurately for the next time-step
         self.mpc.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
-        self.run_times[env.step_counter-1, :] = self.run_time
+        self.run_times[env.step_counter - 1, :] = self.run_time
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -188,12 +190,14 @@ print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
 print(f"Run_times_sum: {sum(agent.run_times)}")
 
-if PLOT:    
+if PLOT:
     plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
 
 if SAVE:
     with open(
-        f"cent_n_{n}_N_{N}_Q_{COST_2_NORM}" + datetime.datetime.now().strftime("%d%H%M%S%f") + ".pkl",
+        f"cent_n_{n}_N_{N}_Q_{COST_2_NORM}"
+        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        + ".pkl",
         "wb",
     ) as file:
         pickle.dump(X, file)

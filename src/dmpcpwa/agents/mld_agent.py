@@ -24,6 +24,7 @@ class MldAgent(Agent):
         self.u_pred = None  # stores most recent predicted control after being solved
         self.cost_pred = None  # stores most recent predicted cost after being solved
         self.run_time = None  # stores most recent solve time of mpc
+
     def evaluate(
         self,
         env: Env,

@@ -229,7 +229,7 @@ class MpcMld:
         )
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
-    def min_1_norm(self, x, Q = None):
+    def min_1_norm(self, x, Q=None):
         """returns a dummy variable t which should be minimised in the cost
         to substitute the minimization of |Qx| (1-norm). This functions will
         also add the required constraints on x to make the minimization of
@@ -243,7 +243,7 @@ class MpcMld:
         y = self.mpc_model.addMVar(
             x.shape, lb=-float("inf"), ub=float("inf"), name="y_dumb"
         )
-        x = Q@x
+        x = Q @ x
         for i in range(n):
             self.mpc_model.addConstr(x[i, :] <= y[i, :], name="dumb_leq")
             self.mpc_model.addConstr(-x[i, :] <= y[i, :], name="dumb_geq")
