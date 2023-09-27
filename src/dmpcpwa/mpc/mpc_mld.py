@@ -229,6 +229,27 @@ class MpcMld:
         )
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
+    def min_1_norm(self, x, Q = None):
+        """returns a dummy variable t which should be minimised in the cost
+        to substitute the minimization of |Qx| (1-norm). This functions will
+        also add the required constraints on x to make the minimization of
+        t equivalent to minimizing |Qx|. If Q not passed it is identity."""
+        if x.shape[1] > 1:
+            raise RuntimeError("x must be a columb vector.")
+        if Q is None:
+            Q = np.eye(x.shape[0])
+        n = x.shape[0]
+        t = self.mpc_model.addMVar((1, 1), lb=-float("inf"), ub=float("inf"), name="t")
+        y = self.mpc_model.addMVar(
+            x.shape, lb=-float("inf"), ub=float("inf"), name="y_dumb"
+        )
+        x = Q@x
+        for i in range(n):
+            self.mpc_model.addConstr(x[i, :] <= y[i, :], name="dumb_leq")
+            self.mpc_model.addConstr(-x[i, :] <= y[i, :], name="dumb_geq")
+        self.mpc_model.addConstr(sum(y[i, :] for i in range(n)) == t, name="dumb_eq")
+        return t
+
     def min_2_norm(self, x, Q):
         """return the term x'@Q@x."""
         # I have to do the tranpose part manually because gurobi does not support

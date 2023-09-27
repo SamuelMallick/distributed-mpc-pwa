@@ -15,9 +15,9 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 np.random.seed(1)
 
 n = 2  # num cars
-N = 3  # controller horizon
+N = 5  # controller horizon
 w = 1e4  # slack variable penalty
-COST_2_NORM = True
+COST_2_NORM = False
 
 ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
@@ -79,7 +79,7 @@ class MPCMldCent(MpcMld):
         # formulate cost
         # leader_traj gets changed and fixed by setting its bounds
         self.leader_traj = self.mpc_model.addMVar(
-            (n, N + 1), lb=0, ub=0, name="leader_traj"
+            (nx_l, N + 1), lb=0, ub=0, name="leader_traj"
         )
         obj = 0
         for i in range(n):
