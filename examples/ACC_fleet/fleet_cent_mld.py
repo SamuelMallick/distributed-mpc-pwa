@@ -14,11 +14,11 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 5  # num cars
+n = 2  # num cars
 N = 3  # controller horizon
 w = 1e4  # slack variable penalty
 
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -67,46 +67,21 @@ class MPCMldCent(MpcMld):
     def __init__(self, system: dict, N: int) -> None:
         super().__init__(system, N)
 
-        self.mpc_model.setObjective(0, gp.GRB.MINIMIZE)
-
-        # add extra constraints
-        # acceleration constraints
-        for i in range(n):
-            for k in range(N):
-                self.mpc_model.addConstr(
-                    acc.a_dec * acc.ts
-                    <= self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]],
-                    name=f"dec_car_{i}_step{k}",
-                )
-                self.mpc_model.addConstr(
-                    self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]]
-                    <= acc.a_acc * acc.ts,
-                    name=f"acc_car_{i}_step{k}",
-                )
-
-        # safe distance behind follower vehicle
         # slack vars for soft constraints
         self.s = self.mpc_model.addMVar((n, N + 1), lb=0, ub=float("inf"), name="s")
 
-        for i in range(n):
-            local_state = self.x[nx_l * i : nx_l * (i + 1), :]
-            if i != 0:  # leader isn't following another car
-                follow_state = self.x[nx_l * (i - 1) : nx_l * (i), :]
-                for k in range(N + 1):
-                    self.mpc_model.addConstr(
-                        local_state[0, [k]]
-                        <= follow_state[0, [k]] - d_safe + self.s[i, [k]],
-                        name=f"safe_dis_car_{i}_step{k}",
-                    )
-
-    def set_leader_traj(self, leader_traj):
+        # formulate cost
+        # leader_traj gets changed and fixed by setting its bounds
+        self.leader_traj = self.mpc_model.addMVar(
+            (n, N + 1), lb=0, ub=0, name="leader_traj"
+        ) 
         obj = 0
         for i in range(n):
             local_state = self.x[nx_l * i : nx_l * (i + 1), :]
             local_control = self.u[nu_l * i : nu_l * (i + 1), :]
             if i == 0:
                 # first car follows traj with no sep
-                follow_state = leader_traj
+                follow_state = self.leader_traj
                 for k in range(N):
                     obj += (
                         local_state[:, k] - follow_state[:, k] - np.zeros((1, 2))
@@ -136,8 +111,40 @@ class MPCMldCent(MpcMld):
                 obj += (local_state[:, N] - follow_state[:, N] - sep.T) @ Q_x_l @ (
                     local_state[:, [N]] - follow_state[:, [N]] - sep
                 ) + w * self.s[i, [N]]
-
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
+
+        # add extra constraints
+        # acceleration constraints
+        for i in range(n):
+            for k in range(N):
+                self.mpc_model.addConstr(
+                    acc.a_dec * acc.ts
+                    <= self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]],
+                    name=f"dec_car_{i}_step{k}",
+                )
+                self.mpc_model.addConstr(
+                    self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]]
+                    <= acc.a_acc * acc.ts,
+                    name=f"acc_car_{i}_step{k}",
+                )
+
+        # safe distance behind follower vehicle
+
+        for i in range(n):
+            local_state = self.x[nx_l * i : nx_l * (i + 1), :]
+            if i != 0:  # leader isn't following another car
+                follow_state = self.x[nx_l * (i - 1) : nx_l * (i), :]
+                for k in range(N + 1):
+                    self.mpc_model.addConstr(
+                        local_state[0, [k]]
+                        <= follow_state[0, [k]] - d_safe + self.s[i, [k]],
+                        name=f"safe_dis_car_{i}_step{k}",
+                    )
+
+    def set_leader_traj(self, leader_traj):
+        for k in range(N + 1):
+            self.leader_traj[:, [k]].ub = leader_traj[:, [k]]
+            self.leader_traj[:, [k]].lb = leader_traj[:, [k]]
 
 
 class TrackingMldAgent(MldAgent):
