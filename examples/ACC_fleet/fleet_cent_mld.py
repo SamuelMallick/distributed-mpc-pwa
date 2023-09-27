@@ -17,6 +17,7 @@ np.random.seed(1)
 n = 2  # num cars
 N = 3  # controller horizon
 w = 1e4  # slack variable penalty
+COST_2_NORM = True
 
 ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
@@ -67,6 +68,11 @@ class MPCMldCent(MpcMld):
     def __init__(self, system: dict, N: int) -> None:
         super().__init__(system, N)
 
+        if COST_2_NORM:
+            cost_func = self.min_2_norm
+        else:
+            cost_func = self.min_1_norm
+
         # slack vars for soft constraints
         self.s = self.mpc_model.addMVar((n, N + 1), lb=0, ub=float("inf"), name="s")
 
@@ -74,7 +80,7 @@ class MPCMldCent(MpcMld):
         # leader_traj gets changed and fixed by setting its bounds
         self.leader_traj = self.mpc_model.addMVar(
             (n, N + 1), lb=0, ub=0, name="leader_traj"
-        ) 
+        )
         obj = 0
         for i in range(n):
             local_state = self.x[nx_l * i : nx_l * (i + 1), :]
@@ -82,35 +88,20 @@ class MPCMldCent(MpcMld):
             if i == 0:
                 # first car follows traj with no sep
                 follow_state = self.leader_traj
-                for k in range(N):
-                    obj += (
-                        local_state[:, k] - follow_state[:, k] - np.zeros((1, 2))
-                    ) @ Q_x_l @ (
-                        local_state[:, [k]] - follow_state[:, [k]] - np.zeros((2, 1))
-                    ) + local_control[
-                        :, k
-                    ] @ Q_u_l @ local_control[
-                        :, [k]
-                    ]
-                obj += (
-                    (local_state[:, N] - follow_state[:, N] - np.zeros((1, 2)))
-                    @ Q_x_l
-                    @ (local_state[:, [N]] - follow_state[:, [N]] - np.zeros((2, 1)))
-                )
+                temp_sep = np.zeros((2, 1))
             else:
                 # otherwise follow car infront (i-1)
                 follow_state = self.x[nx_l * (i - 1) : nx_l * (i), :]
-                for k in range(N):
-                    obj += (
-                        (local_state[:, k] - follow_state[:, k] - sep.T)
-                        @ Q_x_l
-                        @ (local_state[:, [k]] - follow_state[:, [k]] - sep)
-                        + local_control[:, k] @ Q_u_l @ local_control[:, [k]]
-                        + w * self.s[i, [k]]
-                    )
-                obj += (local_state[:, N] - follow_state[:, N] - sep.T) @ Q_x_l @ (
-                    local_state[:, [N]] - follow_state[:, [N]] - sep
-                ) + w * self.s[i, [N]]
+                temp_sep = sep
+            for k in range(N):
+                obj += cost_func(
+                   local_state[:, [k]] - follow_state[:, [k]] - temp_sep, Q_x_l
+                )
+                obj += cost_func(local_control[:, [k]], Q_u_l) + w * self.s[i, [k]]
+            obj += (
+               cost_func(local_state[:, [N]] - follow_state[:, [N]] - temp_sep, Q_x_l)
+               + w * self.s[i, [N]]
+            )
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
         # add extra constraints

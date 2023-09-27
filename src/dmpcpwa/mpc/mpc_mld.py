@@ -229,6 +229,16 @@ class MpcMld:
         )
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
+    def min_2_norm(self, x, Q):
+        """return the term x'@Q@x."""
+        # I have to do the tranpose part manually because gurobi does not support
+        # taking the transpose of an Expr
+        if x.shape[1] > 1:
+            raise RuntimeError("x must be a columb vector.")
+        n = x.shape[0]
+        M = Q @ x
+        return sum(x[i] * M[i] for i in range(n))
+
     def solve_mpc(self, state):
         self.IC.RHS = state
         self.mpc_model.optimize()
