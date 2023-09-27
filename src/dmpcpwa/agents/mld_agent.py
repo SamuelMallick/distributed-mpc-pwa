@@ -23,7 +23,7 @@ class MldAgent(Agent):
         self.x_pred = None  # stores most recent predicted state after being solved
         self.u_pred = None  # stores most recent predicted control after being solved
         self.cost_pred = None  # stores most recent predicted cost after being solved
-
+        self.run_time = None  # stores most recent solve time of mpc
     def evaluate(
         self,
         env: Env,
@@ -85,11 +85,12 @@ class MldAgent(Agent):
         return returns
 
     def get_control(self, state):
-        u, x, cost = self.mpc.solve_mpc(state)
-        self.x_pred = x
-        self.u_pred = u
-        self.cost_pred = cost
-        return u[:, [0]]
+        u, info = self.mpc.solve_mpc(state)
+        self.x_pred = info["x"]
+        self.u_pred = info["u"]
+        self.cost_pred = info["cost"]
+        self.run_time = info["run_time"]
+        return u
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
         """Set cost of the agents mpc-MIP as sum_k x(k)' * Q_x * x(k) + u(k)' * Q_u * u(k).
