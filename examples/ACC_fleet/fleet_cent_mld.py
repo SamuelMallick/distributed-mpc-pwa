@@ -7,18 +7,29 @@ from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
-
+import sys
+import pickle
+import datetime
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 2  # num cars
-N = 5  # controller horizon
-w = 1e4  # slack variable penalty
-COST_2_NORM = False
+PLOT = False
+SAVE = True
 
+n = 2  # num cars
+N = 3  # controller horizon
+COST_2_NORM = True
+if len(sys.argv) > 1:
+    n = int(sys.argv[1])
+if len(sys.argv) > 2:
+    N = int(sys.argv[2])
+if len(sys.argv) > 3:
+    COST_2_NORM = bool(sys.argv[3])
+
+w = 1e4  # slack variable penalty
 ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
@@ -139,9 +150,14 @@ class MPCMldCent(MpcMld):
 
 
 class TrackingMldAgent(MldAgent):
+    def __init__(self, mpc: MpcMld) -> None:
+        self.run_times = np.zeros((ep_len, 1))
+        super().__init__(mpc)
+
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         # time step starts from 1, so this will set the cost accurately for the next time-step
         self.mpc.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
+        self.run_times[env.step_counter-1, :] = self.run_time
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -170,5 +186,17 @@ else:
 
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
+print(f"Run_times_sum: {sum(agent.run_times)}")
 
-plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+if PLOT:    
+    plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+
+if SAVE:
+    with open(
+        f"cent_n_{n}_N_{N}_Q_{COST_2_NORM}" + datetime.datetime.now().strftime("%d%H%M%S%f") + ".pkl",
+        "wb",
+    ) as file:
+        pickle.dump(X, file)
+        pickle.dump(U, file)
+        pickle.dump(R, file)
+        pickle.dump(agent.run_times, file)
