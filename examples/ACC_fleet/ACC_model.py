@@ -80,7 +80,7 @@ class ACC:
     A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
     A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
     A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
+    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
     A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
     A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
     A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
@@ -99,7 +99,7 @@ class ACC:
     c.append(np.array([[0], [-mu * grav]]))
     c.append(np.array([[0], [-mu * grav]]))
     c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav - d / mass]]))
+    c.append(np.array([[0], [-mu * grav]]))
     c.append(np.array([[0], [-mu * grav - d / mass]]))
     c.append(np.array([[0], [-mu * grav - d / mass]]))
     c.append(np.array([[0], [-mu * grav - d / mass]]))
@@ -184,8 +184,8 @@ class ACC:
     def __init__(self, ep_len, N):
         # generate trajectory of leader
         leader_state = np.zeros((2, ep_len + N + 1))
-        leader_speed = 15
-        leader_initial_pos = 500
+        leader_speed = 20
+        leader_initial_pos = 400
         leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
         for k in range(ep_len + N):
             leader_state[:, [k + 1]] = leader_state[:, [k]] + self.ts * np.array(
@@ -215,7 +215,7 @@ class ACC:
             raise RuntimeError("Gear value is not an int.")
         gear = int(j)
         return self.b[gear - 1]
-
+    
     def get_pwa_system(self):
         """Get the full pwa system dictionary."""
         return self.pwa_system

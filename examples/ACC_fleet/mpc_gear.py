@@ -118,7 +118,7 @@ class MpcGear(MpcMld):
                 j + 1
                 for j in range(6)
                 for i in range(self.m)
-                if sig[j, i, 0] - 1 <= 1e-6 and sig[j, i, 0] - 1 >= -1e-6
+                if sig[j, i, 0] - 1 <= 1e-6 and sig[j, i, 0] - 1 >= -1e-3
             ]
         else:
             u_g = np.zeros((self.m, self.N))

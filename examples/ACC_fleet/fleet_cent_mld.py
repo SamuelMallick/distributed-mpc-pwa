@@ -23,9 +23,9 @@ PLOT = True
 SAVE = False
 
 n = 2  # num cars
-N = 3  # controller horizon
-COST_2_NORM = False
-DISCRETE_GEARS = False
+N = 5  # controller horizon
+COST_2_NORM = True
+DISCRETE_GEARS = True
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
