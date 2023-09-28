@@ -215,7 +215,7 @@ class ACC:
             raise RuntimeError("Gear value is not an int.")
         gear = int(j)
         return self.b[gear - 1]
-    
+
     def get_pwa_system(self):
         """Get the full pwa system dictionary."""
         return self.pwa_system
