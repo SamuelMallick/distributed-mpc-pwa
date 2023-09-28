@@ -1,4 +1,3 @@
-import gurobipy as gp
 import matplotlib.pyplot as plt
 import numpy as np
 from dmpcrl.utils.discretisation import forward_euler
@@ -53,7 +52,8 @@ class ACC:
     v_gear_lim = []
     for i in range(1, 6):
         v_gear_lim.append((vh[i] - vl[i]) / 2 + vl[i])
-    # build PWA system
+
+    # build full PWA system
     s = 7  # 7 PWA regions
     r = 2  # number of rows in Sx + RU <= T conditions
     S = []
@@ -132,6 +132,45 @@ class ACC:
         "G": G,
     }
 
+    # build smaller PWA system for just the friction, which is used with dicrete input model of gears
+    s = 2  # 7 PWA regions
+    r = 2  # number of rows in Sx + RU <= T conditions
+    S = []
+    R = []
+    T = []
+    A = []
+    B = []
+    c = []
+
+    for i in range(s):
+        S.append(np.array([[0, 1], [0, -1]]))
+        R.append(np.zeros((r, 1)))
+
+    T.append(np.array([[alpha], [-x2_min]]))
+    T.append(np.array([[x2_max], [-alpha]]))
+
+    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
+    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
+
+    B.append(np.array([[0], [(1) / (mass)]]))
+    B.append(np.array([[0], [(1) / (mass)]]))
+
+    c.append(np.array([[0], [-mu * grav]]))
+    c.append(np.array([[0], [-mu * grav - d / mass]]))
+
+    friction_pwa_system = {
+        "S": S,
+        "R": R,
+        "T": T,
+        "A": Ad,
+        "B": Bd,
+        "c": cd,
+        "D": D,
+        "E": E,
+        "F": F,
+        "G": G,
+    }
+
     def __init__(self, ep_len, N):
         # generate trajectory of leader
         leader_state = np.zeros((2, ep_len + N + 1))
@@ -165,11 +204,15 @@ class ACC:
         if j % 1 != 0:
             raise RuntimeError("Gear value is not an int.")
         gear = int(j)
-        return self.b[gear]
+        return self.b[gear - 1]
 
     def get_pwa_system(self):
-        """Get to system dictionary."""
+        """Get the full pwa system dictionary."""
         return self.pwa_system
+
+    def get_friction_pwa_system(self):
+        """Get the friction pwa system dictionary."""
+        return self.friction_pwa_system
 
     # the true non-linear dynamics of the car
     def step_car_dynamics_nl(self, x, u, j, n, ts):

@@ -131,7 +131,7 @@ class MpcMld:
             # add state and input constraints to model, then binary and auxillary constraint, then dynamics constraints
 
             mpc_model.addConstr(D @ x[:, [k]] <= E, name="state constraints")
-            mpc_model.addConstr(F @ u[:, [k]] <= G, name="control constraints")
+            mpc_model.addConstr(F @ u[:, [k]] <= G, name=f"control constraints_{k}")
 
             mpc_model.addConstrs(
                 (
