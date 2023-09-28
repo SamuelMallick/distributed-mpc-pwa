@@ -89,17 +89,23 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
 
         action = action.full()
 
-        if action.shape[0] > self.n:    # this action contains n gear choices aswell as continuous throttle vals
-            cont_action = action[:self.n, :]
-            disc_action = action[self.n:, :]
+        if (
+            action.shape[0] > self.n
+        ):  # this action contains n gear choices aswell as continuous throttle vals
+            cont_action = action[: self.n, :]
+            disc_action = action[self.n :, :]
         else:
             cont_action = action
             disc_action = np.zeros((self.n, 1))
             for i in range(self.n):
-                disc_action[i, :] = self.acc.get_pwa_gear_from_speed(self.x[2*i+1, :])
+                disc_action[i, :] = self.acc.get_pwa_gear_from_speed(
+                    self.x[2 * i + 1, :]
+                )
 
         r = self.get_stage_cost(self.x, cont_action)
-        x_new = self.acc.step_car_dynamics_nl(self.x, cont_action, disc_action, self.n, self.acc.ts)
+        x_new = self.acc.step_car_dynamics_nl(
+            self.x, cont_action, disc_action, self.n, self.acc.ts
+        )
         self.x = x_new
 
         self.step_counter += 1

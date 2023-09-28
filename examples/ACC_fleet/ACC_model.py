@@ -51,8 +51,8 @@ class ACC:
 
     # PWA regions velocity upper limits for gear switches
     v_gear_lim = []
-    for i in range(1,6):
-        v_gear_lim.append((vh[i]-vl[i])/2 + vl[i])
+    for i in range(1, 6):
+        v_gear_lim.append((vh[i] - vl[i]) / 2 + vl[i])
     # build PWA system
     s = 7  # 7 PWA regions
     r = 2  # number of rows in Sx + RU <= T conditions
@@ -143,13 +143,13 @@ class ACC:
                 [[leader_speed], [0]]
             )
         self.leader_state = leader_state
-    
+
     def get_pwa_gear_from_speed(self, v):
         """Get the gear j from the speed v, by the PWA model."""
         # check gear 2 to 5
-        for i in range(len(self.b)-2):
-            if v >= self.v_gear_lim[i] and v < self.v_gear_lim[i+1]:
-                return i+2
+        for i in range(len(self.b) - 2):
+            if v >= self.v_gear_lim[i] and v < self.v_gear_lim[i + 1]:
+                return i + 2
 
         # check gear 1
         if v < self.v_gear_lim[0] and v >= self.x2_min:
@@ -157,12 +157,12 @@ class ACC:
         if v >= self.v_gear_lim[-1] and v <= self.x2_max:
             return 6
         raise RuntimeError(f"Didn't find any gear for the given speed {v}")
-    
+
     def get_traction_from_gear(self, j):
         """Get the corresponding constant traction force for the gear j."""
         if j < 1 or j > 6:
             raise RuntimeError("Gear value out of range.")
-        if j%1 != 0:
+        if j % 1 != 0:
             raise RuntimeError("Gear value is not an int.")
         gear = int(j)
         return self.b[gear]
