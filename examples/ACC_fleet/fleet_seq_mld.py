@@ -115,28 +115,32 @@ class LocalMpcMld(MpcMld):
                 name=f"dec_{k}",
             )
             # safe distance constraints
-            self.mpc_model.addConstr(
-                self.x[0, [k]] - self.s_front[:, [k]] <= self.x_front[0, [k]] - d_safe,
-                name=f"safety_ahead_{k}",
+            if not leader:
+                self.mpc_model.addConstr(
+                    self.x[0, [k]] - self.s_front[:, [k]] <= self.x_front[0, [k]] - d_safe,
+                    name=f"safety_ahead_{k}",
             )
 
-            self.mpc_model.addConstr(
-                self.x[0, [k]] + self.s_back[:, [k]] >= self.x_back[0, [k]] + d_safe,
-                name=f"safety_behind_{k}",
-            )
+            if not trailer:
+                self.mpc_model.addConstr(
+                    self.x[0, [k]] + self.s_back[:, [k]] >= self.x_back[0, [k]] + d_safe,
+                    name=f"safety_behind_{k}",
+                )
 
         obj += cost_func(self.x[:, [N]] - self.x_front[:, [N]] - temp_sep, Q_x_l)
         obj += +w * self.s_front[:, N] + w * self.s_back[:, N]
 
-        self.mpc_model.addConstr(
-            self.x[0, [N]] - self.s_front[:, [N]] <= self.x_front[0, [N]] - d_safe,
-            name=f"safety_ahead_{N}",
-        )
+        if not leader:
+            self.mpc_model.addConstr(
+                self.x[0, [N]] - self.s_front[:, [N]] <= self.x_front[0, [N]] - d_safe,
+                name=f"safety_ahead_{N}",
+            )
 
-        self.mpc_model.addConstr(
-            self.x[0, [N]] + self.s_back[:, [N]] >= self.x_back[0, [N]] + d_safe,
-            name=f"safety_behind_{N}",
-        )
+        if not trailer:
+            self.mpc_model.addConstr(
+                self.x[0, [N]] + self.s_back[:, [N]] >= self.x_back[0, [N]] + d_safe,
+                name=f"safety_behind_{N}",
+            )
 
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
