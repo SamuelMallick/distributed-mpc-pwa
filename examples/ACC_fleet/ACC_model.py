@@ -27,8 +27,8 @@ class ACC:
 
     x1_min = 0  # min pos
     x1_max = 3000  # max_pos
-    x2_min = 2  # min velocity
-    x2_max = 40  # max velocity
+    x2_min = 3.94  # min velocity
+    x2_max = 45.84  # max velocity
     u_max = 1  # max throttle/brake
     a_acc = 2.5  # comfort acc
     a_dec = -2  # comfort dec
@@ -49,44 +49,10 @@ class ACC:
     d = beta - alpha * ((c_fric * x2_max**2 - beta) / (x2_max - alpha))
     # d = 0.230769
 
-    # PWA approximation of gear function b(j, x2)
-    # first step - consider only regions constant with velocity, therefore we use values in list b
-    # second step (approximation) - make it so we can express b(j) as b(j) = beta_0 + j beta_1 with minimum deviation from values in list b
-
-    opt_mod = gp.Model("linear model ")
-    opt_mod.setParam("OutputFlag", 0)
-    beta_0 = opt_mod.addVar(lb=-float("inf"), ub=float("inf"), name="beta_0")
-    beta_1 = opt_mod.addVar(lb=-float("inf"), ub=float("inf"), name="beta_1")
-    obj = 0
-    for i in range(len(b)):
-        j = i + 1  # gears go from 1-6
-        obj += (b[i] - (beta_0 + j * beta_1)) ** 2
-    opt_mod.setObjective(obj, gp.GRB.MINIMIZE)
-    opt_mod.optimize()
-    beta_0 = beta_0.X
-    beta_1 = beta_1.X
-
-    # third step (approximation) - express v_0 + v_1j <= s_dot <= v_0 + v_1(j+1)
-    # this gives us a one to one mapping between gear and velocity
-    # these values effect how we skew the choice of velocity to gear mapping
-    # they are taken from the paper
-    gamma_l = 1
-    gamma_h = 100
-    v_0 = opt_mod.addVar(lb=-float("inf"), ub=float("inf"), name="v_0")
-    v_1 = opt_mod.addVar(lb=-float("inf"), ub=float("inf"), name="v_1")
-    obj = 0
-    for i in range(len(b)):
-        j = i + 1  # gears go from 1-6
-        obj += (
-            gamma_l * (vl[i] - (v_0 + j * v_1)) ** 2
-            + gamma_h * (vh[i] - (v_0 + (j + 1) * v_1)) ** 2
-        )
-    opt_mod.addConstr(v_0 + v_1 >= x2_min)
-    opt_mod.setObjective(obj, gp.GRB.MINIMIZE)
-    opt_mod.optimize()
-    v_0 = v_0.X
-    v_1 = v_1.X
-
+    # PWA regions velocity upper limits for gear switches
+    v_gear_lim = []
+    for i in range(1,6):
+        v_gear_lim.append((vh[i]-vl[i])/2 + vl[i])
     # build PWA system
     s = 7  # 7 PWA regions
     r = 2  # number of rows in Sx + RU <= T conditions
@@ -102,13 +68,13 @@ class ACC:
         R.append(np.zeros((r, 1)))
 
     # manually append the limits
-    T.append(np.array([[v_0 + v_1 * (2)], [-x2_min]]))
-    T.append(np.array([[v_0 + v_1 * (3)], [-(v_0 + v_1 * (2))]]))
-    T.append(np.array([[alpha], [-(v_0 + v_1 * (3))]]))
-    T.append(np.array([[v_0 + v_1 * (4)], [-alpha]]))
-    T.append(np.array([[v_0 + v_1 * (5)], [-(v_0 + v_1 * (4))]]))
-    T.append(np.array([[v_0 + v_1 * (6)], [-(v_0 + v_1 * (5))]]))
-    T.append(np.array([[x2_max], [-(v_0 + v_1 * (6))]]))
+    T.append(np.array([[v_gear_lim[0]], [-x2_min]]))
+    T.append(np.array([[v_gear_lim[1]], [-v_gear_lim[0]]]))
+    T.append(np.array([[v_gear_lim[2]], [-v_gear_lim[1]]]))
+    T.append(np.array([[alpha], [v_gear_lim[2]]]))
+    T.append(np.array([[v_gear_lim[3]], [-alpha]]))
+    T.append(np.array([[v_gear_lim[4]], [-v_gear_lim[3]]]))
+    T.append(np.array([[x2_max], [-v_gear_lim[4]]]))
 
     # manually append the A matrices - first three regions have c1 and last four have c2 for friction
     A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
@@ -120,14 +86,14 @@ class ACC:
     A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
 
     # manually append B matrices
-    B.append(np.array([[0], [(beta_0 + 1 * beta_1) / (mass)]]))
-    B.append(np.array([[0], [(beta_0 + 2 * beta_1) / (mass)]]))
-    # third and fourth share same gear as the split is over the friction coeff
-    B.append(np.array([[0], [(beta_0 + 3 * beta_1) / (mass)]]))
-    B.append(np.array([[0], [(beta_0 + 3 * beta_1) / (mass)]]))
-    B.append(np.array([[0], [(beta_0 + 4 * beta_1) / (mass)]]))
-    B.append(np.array([[0], [(beta_0 + 5 * beta_1) / (mass)]]))
-    B.append(np.array([[0], [(beta_0 + 6 * beta_1) / (mass)]]))
+    B.append(np.array([[0], [(b[0]) / (mass)]]))
+    B.append(np.array([[0], [(b[1]) / (mass)]]))
+    B.append(np.array([[0], [(b[2]) / (mass)]]))
+    # fourth and fifth share same gear as the split is over the friction coeff
+    B.append(np.array([[0], [(b[3]) / (mass)]]))
+    B.append(np.array([[0], [(b[3]) / (mass)]]))
+    B.append(np.array([[0], [(b[4]) / (mass)]]))
+    B.append(np.array([[0], [(b[5]) / (mass)]]))
 
     # manually append c matrices - last four regions have offset d due to friction PWA
     c.append(np.array([[0], [-mu * grav]]))
@@ -177,28 +143,37 @@ class ACC:
                 [[leader_speed], [0]]
             )
         self.leader_state = leader_state
+    
+    def get_pwa_gear_from_speed(self, v):
+        """Get the gear j from the speed v, by the PWA model."""
+        # check gear 2 to 5
+        for i in range(len(self.b)-2):
+            if v >= self.v_gear_lim[i] and v < self.v_gear_lim[i+1]:
+                return i+2
 
-    def get_traction_force(self, v):
-        """Get the corresponding constant traction force for speed v."""
-        for i in range(len(self.b)):
-            j = i + 1
-            if self.v_0 + j * self.v_1 <= v and v <= self.v_0 + (j + 1) * self.v_1:
-                return self.b[i]
-
-        # if speed is outside of bounds, use the traction force for the closest region
-        if v <= self.v_0 + (2) * self.v_1:
-            return self.b[0]
-        if self.v_0 + 6 * self.v_1 <= v:
-            return self.b[-1]
-        raise RuntimeError("Didn't find any traction force for the given speed!")
+        # check gear 1
+        if v < self.v_gear_lim[0] and v >= self.x2_min:
+            return 1
+        if v >= self.v_gear_lim[-1] and v <= self.x2_max:
+            return 6
+        raise RuntimeError(f"Didn't find any gear for the given speed {v}")
+    
+    def get_traction_from_gear(self, j):
+        """Get the corresponding constant traction force for the gear j."""
+        if j < 1 or j > 6:
+            raise RuntimeError("Gear value out of range.")
+        if j%1 != 0:
+            raise RuntimeError("Gear value is not an int.")
+        gear = int(j)
+        return self.b[gear]
 
     def get_pwa_system(self):
         """Get to system dictionary."""
         return self.pwa_system
 
     # the true non-linear dynamics of the car
-    def step_car_dynamics_nl(self, x, u, n, ts):
-        """Steps the car dynamics for n cars with non-linear model by ts seconds. x is state, u is control."""
+    def step_car_dynamics_nl(self, x, u, j, n, ts):
+        """Steps the car dynamics for n cars with non-linear model by ts seconds. x is state, u is control, j is gears."""
         num_steps = 10
         DT = ts / num_steps
         for t in range(num_steps):
@@ -206,6 +181,7 @@ class ACC:
             for i in range(n):
                 x_l = x[self.nx_l * i : self.nx_l * (i + 1), :]  # get local state
                 u_l = u[self.nu_l * i : self.nu_l * (i + 1), :]  # get local control
+                j_l = j[self.nu_l * i : self.nu_l * (i + 1), :]  # get local gear
                 f = np.array(
                     [
                         [x_l[1, 0]],
@@ -215,7 +191,7 @@ class ACC:
                         ],
                     ]
                 )
-                B = np.array([[0], [self.get_traction_force(x_l[1, 0]) / self.mass]])
+                B = np.array([[0], [self.get_traction_from_gear(j_l) / self.mass]])
                 x_temp[self.nx_l * i : self.nx_l * (i + 1), :] = x_l + DT * (
                     f + B * u_l
                 )

@@ -38,8 +38,8 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
             400 * np.random.random() for i in range(self.n)
         ]  # starting positions between 0-400 m
         starting_velocities = [
-            33 * np.random.random() + 2 for i in range(self.n)
-        ]  # starting velocities between 2-35 ms-1
+            30 * np.random.random() + 5 for i in range(self.n)
+        ]  # starting velocities between 5-35 ms-1
         self.x = np.tile(np.array([[0], [0]]), (self.n, 1))
         for i in range(self.n):
             init_pos = max(starting_positions)  # order the agents by starting distance
@@ -85,11 +85,21 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     def step(
         self, action: cs.DM
     ) -> tuple[npt.NDArray[np.floating], float, bool, bool, dict[str, Any]]:
-        """Steps the LTI system."""
+        """Steps the fleet system."""
 
         action = action.full()
-        r = self.get_stage_cost(self.x, action)
-        x_new = self.acc.step_car_dynamics_nl(self.x, action, self.n, self.acc.ts)
+
+        if action.shape[0] > self.n:    # this action contains n gear choices aswell as continuous throttle vals
+            cont_action = action[:self.n, :]
+            disc_action = action[self.n:, :]
+        else:
+            cont_action = action
+            disc_action = np.zeros((self.n, 1))
+            for i in range(self.n):
+                disc_action[i, :] = self.acc.get_pwa_gear_from_speed(self.x[2*i+1, :])
+
+        r = self.get_stage_cost(self.x, cont_action)
+        x_new = self.acc.step_car_dynamics_nl(self.x, cont_action, disc_action, self.n, self.acc.ts)
         self.x = x_new
 
         self.step_counter += 1
