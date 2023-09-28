@@ -158,6 +158,16 @@ class ACC:
     c.append(np.array([[0], [-mu * grav]]))
     c.append(np.array([[0], [-mu * grav - d / mass]]))
 
+    # discretise the dynamics
+    Ad = []
+    Bd = []
+    cd = []
+    for i in range(s):
+        Ad_i, Bd_i, cd_i = forward_euler(A[i], B[i], ts, c[i])
+        Ad.append(Ad_i)
+        Bd.append(Bd_i)
+        cd.append(cd_i)
+
     friction_pwa_system = {
         "S": S,
         "R": R,

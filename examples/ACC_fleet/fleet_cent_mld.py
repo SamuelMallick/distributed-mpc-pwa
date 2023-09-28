@@ -121,7 +121,7 @@ class MPCMldCent(MpcMld):
         obj = 0
         for i in range(n):
             local_state = self.x[nx_l * i : nx_l * (i + 1), :]
-            local_control = self.u[nu_l * i : nu_l * (i + 1), :]
+            local_control = u[nu_l * i : nu_l * (i + 1), :]
             if i == 0:
                 # first car follows traj with no sep
                 follow_state = self.leader_traj
@@ -179,7 +179,7 @@ class MpcGearCent(MPCMldCent, MpcGear):
     def __init__(self, system: dict, N: int) -> None:
         super().__init__(system, N)
         self.setup_gears(N, acc)
-        self.setup_cost_and_constraints(self.u)
+        self.setup_cost_and_constraints(self.u_g)
 
 
 class TrackingMldAgent(MldAgent):

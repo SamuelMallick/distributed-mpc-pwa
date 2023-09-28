@@ -114,15 +114,15 @@ class MpcGear(MpcMld):
         if self.mpc_model.Status == 2:  # check for successful solve
             u_g = self.u_g.X
             sig = self.sigma.X
+            gears = [
+                j + 1
+                for j in range(6)
+                for i in range(self.m)
+                if sig[j, i, 0] - 1 <= 1e-6 and sig[j, i, 0] - 1 >= -1e-6
+            ]
         else:
             u_g = np.zeros((self.m, self.N))
-            u_d = np.ones((self.m, self.N))  # default set all gears to one if infeas
+            gears = np.ones((self.m, 1))  # default set all gears to one if infeas
 
-        gears = [
-            j + 1
-            for j in range(6)
-            for i in range(self.m)
-            if sig[j, i, 0] - 1 <= 1e-6 and sig[j, i, 0] - 1 >= -1e-6
-        ]
         info["u"] = u_g
-        return np.vstack((u_0, np.asarray(gears).reshape(self.m, 1))), info
+        return np.vstack((u_g[:, [0]], np.asarray(gears).reshape(self.m, 1))), info
