@@ -6,7 +6,6 @@ import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
-from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpc_gear import MpcGear
@@ -15,7 +14,7 @@ from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
-from dmpcpwa.utils.pwa_models import cent_from_dist
+from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(1)
 
@@ -36,19 +35,6 @@ if len(sys.argv) > 3:
 
 w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
-Adj = np.zeros((n, n))  # adjacency matrix
-if n > 1:
-    for i in range(n):  # make it chain coupling
-        if i == 0:
-            Adj[i, i + 1] = 1
-        elif i == n - 1:
-            Adj[i, i - 1] = 1
-        else:
-            Adj[i, i + 1] = 1
-            Adj[i, i - 1] = 1
-else:
-    Adj = np.zeros((1, 1))
-G_map = g_map(Adj)
 
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
@@ -58,49 +44,13 @@ Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
-
-# construct centralised system
-# no state coupling here so all zeros
-system = acc.get_pwa_system()
-Ac = np.zeros((nx_l, nx_l))
-systems = []  # list of systems, 1 for each agent
-for i in range(n):
-    systems.append(system.copy())
-    # add the coupling part of the system
-    Ac_i = []
-    for j in range(n):
-        if Adj[i, j] == 1:
-            Ac_i.append(Ac)
-    systems[i]["Ac"] = []
-    for j in range(
-        len(system["S"])
-    ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
-        systems[i]["Ac"] = systems[i]["Ac"] + [Ac_i]
-
-cent_full_pwa_system = cent_from_dist(systems, Adj)
-
-system = acc.get_friction_pwa_system()
-Ac = np.zeros((nx_l, nx_l))
-systems = []  # list of systems, 1 for each agent
-for i in range(n):
-    systems.append(system.copy())
-    # add the coupling part of the system
-    Ac_i = []
-    for j in range(n):
-        if Adj[i, j] == 1:
-            Ac_i.append(Ac)
-    systems[i]["Ac"] = []
-    for j in range(
-        len(system["S"])
-    ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
-        systems[i]["Ac"] = systems[i]["Ac"] + [Ac_i]
-
-cent_friction_pwa_system = cent_from_dist(systems, Adj)
+full_system = acc.get_pwa_system()
+friction_system = acc.get_friction_pwa_system()
 
 
-class MPCMldCent(MpcMld):
-    def __init__(self, system: dict, N: int) -> None:
-        super().__init__(system, N)
+class MPCMldCent(MpcMldCentDecup):
+    def __init__(self, system: dict, n, N: int) -> None:
+        super().__init__(system, n, N)
         self.setup_cost_and_constraints(self.u)
 
     def setup_cost_and_constraints(self, u):
@@ -176,8 +126,8 @@ class MPCMldCent(MpcMld):
 
 
 class MpcGearCent(MPCMldCent, MpcGear):
-    def __init__(self, system: dict, N: int) -> None:
-        MpcGear.__init__(self, system, N) # use the MpcMld constructor
+    def __init__(self, system: dict, n: int, N: int) -> None:
+        MpcGear.__init__(self, system, n, N)  # use the MpcMld constructor
         self.setup_gears(N, acc)
         self.setup_cost_and_constraints(self.u_g)
 
@@ -202,12 +152,12 @@ class TrackingMldAgent(MldAgent):
 env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
 
 if DISCRETE_GEARS:
-    mpc = MpcGearCent(cent_friction_pwa_system, N)
+    mpc = MpcGearCent(friction_system, n, N)
     mpc.set_leader_traj(leader_state[:, 0 : N + 1])
     agent = TrackingMldAgent(mpc)
 else:
     # mld mpc
-    mld_mpc = MPCMldCent(cent_full_pwa_system, N)
+    mld_mpc = MPCMldCent(full_system, n, N)
     # initialise the cost with the first tracking point
     mld_mpc.set_leader_traj(leader_state[:, 0 : N + 1])
     agent = TrackingMldAgent(mld_mpc)
