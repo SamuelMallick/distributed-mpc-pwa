@@ -5,10 +5,12 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
+from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
+from scipy.linalg import block_diag
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
@@ -16,28 +18,15 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 3  # num cars
+n = 2  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = True
+DISCRETE_GEARS = False
 
 threshold = 1  # cost improvement must be more than this to consider communication
 
 w = 1e4  # slack variable penalty
 ep_len = 50  # length of episode (sim len)
-Adj = np.zeros((n, n))  # adjacency matrix
-if n > 1:
-    for i in range(n):  # make it chain coupling
-        if i == 0:
-            Adj[i, i + 1] = 1
-        elif i == n - 1:
-            Adj[i, i - 1] = 1
-        else:
-            Adj[i, i + 1] = 1
-            Adj[i, i - 1] = 1
-else:
-    Adj = np.zeros((1, 1))
-G_map = g_map(Adj)
 
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
@@ -50,57 +39,14 @@ sep = acc.sep
 d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
 
-# construct semi-centralised syystem of 2 or 3 agents for local problems
-# no state coupling here so all zeros
-Ac = np.zeros((nx_l, nx_l))
-full_pwa_systems = []
-for i in range(n):
-    temp_systems = []
-    temp_systems.append(full_system.copy())
-    temp_systems.append(full_system.copy())
-    if i == 0 or i == n - 1:  # first and last agent have one neighbor, others have 2
-        temp_Adj = np.array([[0, 0], [0, 0]])
-    else:
-        temp_Adj = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
-        temp_systems.append(full_system.copy())
-    for j in range(len(temp_systems)):
-        temp_systems[j]["Ac"] = []
-        for k in range(
-            len(full_system["S"])
-        ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
-            temp_systems[j]["Ac"] = temp_systems[j]["Ac"] + []
-
-    full_pwa_systems.append(cent_from_dist(temp_systems, temp_Adj))
-
-Ac = np.zeros((nx_l, nx_l))
-friction_pwa_systems = []
-for i in range(n):
-    temp_systems = []
-    temp_systems.append(friction_system.copy())
-    temp_systems.append(friction_system.copy())
-    if i == 0 or i == n - 1:  # first and last agent have one neighbor, others have 2
-        temp_Adj = np.array([[0, 0], [0, 0]])
-    else:
-        temp_Adj = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
-        temp_systems.append(friction_system.copy())
-    for j in range(len(temp_systems)):
-        temp_systems[j]["Ac"] = []
-        for k in range(
-            len(friction_system["S"])
-        ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
-            temp_systems[j]["Ac"] = temp_systems[j]["Ac"] + []
-
-    friction_pwa_systems.append(cent_from_dist(temp_systems, temp_Adj))
-
-
-class LocalMpc(MpcMld):
+class LocalMpc(MpcMldCentDecup):
     """Mpc for a vehicle with a car in front and behind. Local state has car
     is organised with x = [x_front, x_me, x_back]."""
 
     def __init__(
-        self, system: dict, N: int, pos_in_fleet: int, num_vehicles: int
+        self, system: dict, n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
-        super().__init__(system, N)
+        super().__init__(system, n, N)
         self.setup_cost_and_constraints(self.u, pos_in_fleet, num_vehicles)
 
     def setup_cost_and_constraints(self, u, pos_in_fleet, num_vehicles):
@@ -331,14 +277,15 @@ class LocalMpc(MpcMld):
         return super().solve_mpc(state)
 
 
-class LocalMpcGear(LocalMpc, MpcGear):
+class LocalMpcGear(LocalMpc, MpcMldCentDecup, MpcGear):
     def __init__(
-        self, system: dict, N: int, pos_in_fleet: int, num_vehicles: int
+        self, system: dict, n:int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
-        MpcGear.__init__(self, system, N)
-        self.setup_gears(N, acc)
+        MpcMldCentDecup.__init__(self, system, n, N)
+        F = block_diag(*([system["F"]] * n))
+        G = np.vstack([system["G"]] * n)
+        self.setup_gears(N, acc, F, G)
         self.setup_cost_and_constraints(self.u_g, pos_in_fleet, num_vehicles)
-
 
 class TrackingEventBasedCoordinator(MldAgent):
     def __init__(
@@ -526,16 +473,20 @@ env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_l
 
 if DISCRETE_GEARS:
     mpc_class = LocalMpcGear
-    systems = friction_pwa_systems
+    system = friction_system
 else:
     mpc_class = LocalMpc
-    systems = full_pwa_systems
+    system = full_system
 
 # coordinator
 local_mpcs: list[LocalMpc] = []
 for i in range(n):
     # passing local system
-    local_mpcs.append(mpc_class(systems[i], N, i + 1, n))
+    if i == 0 or i == n-1:
+        local_mpcs.append(mpc_class(system, 2, N, i + 1, n))
+    else:
+        local_mpcs.append(mpc_class(system, 3, N, i + 1, n))
+
 agent = TrackingEventBasedCoordinator(local_mpcs)
 
 agent.evaluate(env=env, episodes=1, seed=1)
