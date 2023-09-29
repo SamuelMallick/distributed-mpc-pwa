@@ -7,6 +7,7 @@ from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
@@ -15,12 +16,14 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 4  # num cars
-N = 3  # controller horizon
-w = 1e4  # slack variable penalty
+n = 2  # num cars
+N = 5  # controller horizon
+COST_2_NORM = True
+DISCRETE_GEARS = True
 
 threshold = 1  # cost improvement must be more than this to consider communication
 
+w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
@@ -39,7 +42,8 @@ G_map = g_map(Adj)
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-system = acc.get_pwa_system()
+full_system = acc.get_pwa_system()
+friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
@@ -49,24 +53,44 @@ leader_state = acc.get_leader_state()
 # construct semi-centralised syystem of 2 or 3 agents for local problems
 # no state coupling here so all zeros
 Ac = np.zeros((nx_l, nx_l))
-systems = []
+full_pwa_systems = []
 for i in range(n):
     temp_systems = []
-    temp_systems.append(system.copy())
-    temp_systems.append(system.copy())
+    temp_systems.append(full_system.copy())
+    temp_systems.append(full_system.copy())
     if i == 0 or i == n - 1:  # first and last agent have one neighbor, others have 2
         temp_Adj = np.array([[0, 0], [0, 0]])
     else:
         temp_Adj = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
-        temp_systems.append(system.copy())
+        temp_systems.append(full_system.copy())
     for j in range(len(temp_systems)):
         temp_systems[j]["Ac"] = []
         for k in range(
-            len(system["S"])
+            len(full_system["S"])
         ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
             temp_systems[j]["Ac"] = temp_systems[j]["Ac"] + []
 
-    systems.append(cent_from_dist(temp_systems, temp_Adj))
+    full_pwa_systems.append(cent_from_dist(temp_systems, temp_Adj))
+
+Ac = np.zeros((nx_l, nx_l))
+friction_pwa_systems = []
+for i in range(n):
+    temp_systems = []
+    temp_systems.append(friction_system.copy())
+    temp_systems.append(friction_system.copy())
+    if i == 0 or i == n - 1:  # first and last agent have one neighbor, others have 2
+        temp_Adj = np.array([[0, 0], [0, 0]])
+    else:
+        temp_Adj = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+        temp_systems.append(friction_system.copy())
+    for j in range(len(temp_systems)):
+        temp_systems[j]["Ac"] = []
+        for k in range(
+            len(friction_system["S"])
+        ):  # duplicate it for each PWA region, as for this PWA system the coupling matrices do not change
+            temp_systems[j]["Ac"] = temp_systems[j]["Ac"] + []
+
+    friction_pwa_systems.append(cent_from_dist(temp_systems, temp_Adj))
 
 
 class LocalMpc(MpcMld):
@@ -77,6 +101,13 @@ class LocalMpc(MpcMld):
         self, system: dict, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
         super().__init__(system, N)
+        self.setup_cost_and_constraints(self.u, pos_in_fleet, num_vehicles)
+
+    def setup_cost_and_constraints(self, u, pos_in_fleet, num_vehicles):
+        if COST_2_NORM:
+            cost_func = self.min_2_norm
+        else:
+            cost_func = self.min_1_norm
 
         self.pos_in_fleet = pos_in_fleet
         self.num_vehicles = num_vehicles
@@ -156,7 +187,7 @@ class LocalMpc(MpcMld):
 
         # accel cnstrs
         for k in range(N):
-            for i in range(self.u.shape[0]):
+            for i in range(u.shape[0]):
                 self.mpc_model.addConstr(
                     self.x[2 * i + 1, [k + 1]] - self.x[2 * i + 1, [k]]
                     <= acc.a_acc * acc.ts,
@@ -173,98 +204,81 @@ class LocalMpc(MpcMld):
         # front position tracking portions of cost
         if pos_in_fleet > 1:
             for k in range(N + 1):
-                obj += (
+                obj += cost_func(
                     (
-                        self.x[my_index : my_index + 2, k]
-                        - self.x[f_index : f_index + 2, k]
-                        - sep.T
-                    )
-                    @ Q_x_l
-                    @ (
                         self.x[my_index : my_index + 2, [k]]
                         - self.x[f_index : f_index + 2, [k]]
                         - sep
-                    )
+                    ),
+                    Q_x_l,
                 )
                 +w * self.s_front[:, [k]]
             if pos_in_fleet > 2:
                 for k in range(N + 1):
                     obj += (
-                        (
-                            self.x[f_index : f_index + 2, k]
-                            - self.x_front_2[:, k]
-                            - sep.T
+                        cost_func(
+                            (
+                                self.x[f_index : f_index + 2, [k]]
+                                - self.x_front_2[:, [k]]
+                                - sep
+                            ),
+                            Q_x_l,
                         )
-                        @ Q_x_l
-                        @ (
-                            self.x[f_index : f_index + 2, [k]]
-                            - self.x_front_2[:, [k]]
-                            - sep
-                        )
-                    ) + w * self.s_front_2[:, [k]]
+                        + w * self.s_front_2[:, [k]]
+                    )
         if pos_in_fleet == 1:  # leader
             for k in range(N + 1):
-                obj += (
+                obj += cost_func(
                     (
-                        self.x[my_index : my_index + 2, k]
-                        - self.ref_traj[:, k]
-                        - np.zeros((nx_l, 1)).T
-                    )
-                    @ Q_x_l
-                    @ (
                         self.x[my_index : my_index + 2, [k]]
                         - self.ref_traj[:, [k]]
                         - np.zeros((nx_l, 1))
-                    )
+                    ),
+                    Q_x_l,
                 )
         if pos_in_fleet == 2:  # follower of leader
             for k in range(N + 1):
-                obj += (
+                obj += cost_func(
                     (
-                        self.x[f_index : f_index + 2, k]
-                        - self.ref_traj[:, k]
-                        - np.zeros((nx_l, 1)).T
-                    )
-                    @ Q_x_l
-                    @ (
                         self.x[f_index : f_index + 2, [k]]
                         - self.ref_traj[:, [k]]
                         - np.zeros((nx_l, 1))
-                    )
+                    ),
+                    Q_x_l,
                 )
 
         # slacks for vehicles behind
         if num_vehicles - pos_in_fleet >= 1:
             for k in range(N + 1):
                 obj += (
-                    (
-                        self.x[b_index : b_index + 2, k]
-                        - self.x[my_index : my_index + 2, k]
-                        - sep.T
+                    cost_func(
+                        (
+                            self.x[b_index : b_index + 2, [k]]
+                            - self.x[my_index : my_index + 2, [k]]
+                            - sep
+                        ),
+                        Q_x_l,
                     )
-                    @ Q_x_l
-                    @ (
-                        self.x[b_index : b_index + 2, [k]]
-                        - self.x[my_index : my_index + 2, [k]]
-                        - sep
-                    )
-                ) + w * self.s_back[:, [k]]
+                    + w * self.s_back[:, k]
+                )
             if num_vehicles - pos_in_fleet >= 2:
                 for k in range(N + 1):
                     obj += (
-                        (self.x_back_2[:, k] - self.x[b_index : b_index + 2, k] - sep.T)
-                        @ Q_x_l
-                        @ (
-                            self.x_back_2[:, [k]]
-                            - self.x[b_index : b_index + 2, [k]]
-                            - sep
+                        cost_func(
+                            (
+                                self.x_back_2[:, [k]]
+                                - self.x[b_index : b_index + 2, [k]]
+                                - sep
+                            ),
+                            Q_x_l,
                         )
-                    ) + w * self.s_back_2[:, [k]]
+                        + w * self.s_back_2[:, [k]]
+                    )
 
         # control penalty in cost
-        for i in range(self.u.shape[0]):
+        for i in range(u.shape[0]):
             for k in range(N):
-                obj += self.u[[i], k] @ Q_u_l @ self.u[i, [k]]
+                obj += cost_func(u[i, [k]].reshape(1, 1), Q_u_l)
 
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
@@ -290,8 +304,12 @@ class LocalMpc(MpcMld):
         ):  # we dont constain the N+1th state, as it is defined by shifted control
             self.x[:, [k]].ub = x[:, [k]]
             self.x[:, [k]].lb = x[:, [k]]
-        self.u.ub = u
-        self.u.lb = u
+        if DISCRETE_GEARS:
+            self.u_g.ub = u
+            self.u_g.lb = u
+        else:
+            self.u.ub = u
+            self.u.lb = u
         self.IC.RHS = x[:, [0]]
         self.mpc_model.optimize()
         if self.mpc_model.Status == 2:  # check for successful solve
@@ -304,9 +322,22 @@ class LocalMpc(MpcMld):
         # the solve method is overridden so that the bounds on the vars are set back to normal before solving.
         self.x.ub = float("inf")
         self.x.lb = -float("inf")
-        self.u.ub = float("inf")
-        self.u.lb = -float("inf")
+        if DISCRETE_GEARS:
+            self.u_g.ub = float("inf")
+            self.u_g.lb = -float("inf")
+        else:
+            self.u.ub = float("inf")
+            self.u.lb = -float("inf")
         return super().solve_mpc(state)
+
+
+class LocalMpcGear(LocalMpc, MpcGear):
+    def __init__(
+        self, system: dict, N: int, pos_in_fleet: int, num_vehicles: int
+    ) -> None:
+        MpcGear.__init__(self, system, N)
+        self.setup_gears(N, acc)
+        self.setup_cost_and_constraints(self.u_g, pos_in_fleet, num_vehicles)
 
 
 class TrackingEventBasedCoordinator(MldAgent):
@@ -332,6 +363,7 @@ class TrackingEventBasedCoordinator(MldAgent):
         # store control and state guesses
         self.state_guesses = [np.zeros((nx_l, N + 1)) for i in range(n)]
         self.control_guesses = [np.zeros((nu_l, N)) for i in range(n)]
+        self.gear_guesses = [np.zeros((nu_l, N)) for i in range(n)]
 
     def get_control(self, state):
         [None] * self.n
@@ -394,16 +426,24 @@ class TrackingEventBasedCoordinator(MldAgent):
             if best_idx >= 0:
                 best_x = self.agents[best_idx].x_pred
                 best_u = self.agents[best_idx].u_pred
+                if DISCRETE_GEARS:  # mpc has gears pred if it is gear mpc
+                    best_gears = self.agents[best_idx].mpc.gears_pred
                 if best_idx == 0:
                     self.state_guesses[0] = best_x[0:2, :]
                     self.state_guesses[1] = best_x[2:4, :]
                     self.control_guesses[0] = best_u[[0], :]
                     self.control_guesses[1] = best_u[[1], :]
+                    if DISCRETE_GEARS:
+                        self.gear_guesses[0] = best_gears[[0], :]
+                        self.gear_guesses[1] = best_gears[[1], :]
                 elif best_idx == n - 1:
                     self.state_guesses[n - 2] = best_x[0:2, :]
                     self.state_guesses[n - 1] = best_x[2:4, :]
                     self.control_guesses[n - 2] = best_u[[0], :]
                     self.control_guesses[n - 1] = best_u[[1], :]
+                    if DISCRETE_GEARS:
+                        self.gear_guesses[n - 2] = best_gears[[0], :]
+                        self.gear_guesses[n - 1] = best_gears[[1], :]
                 else:
                     self.state_guesses[best_idx - 1] = best_x[0:2, :]
                     self.state_guesses[best_idx] = best_x[2:4, :]
@@ -411,10 +451,23 @@ class TrackingEventBasedCoordinator(MldAgent):
                     self.control_guesses[best_idx - 1] = best_u[[0], :]
                     self.control_guesses[best_idx] = best_u[[1], :]
                     self.control_guesses[best_idx + 1] = best_u[[2], :]
+                    if DISCRETE_GEARS:
+                        self.gear_guesses[best_idx - 1] = best_gears[[0], :]
+                        self.gear_guesses[best_idx] = best_gears[[1], :]
+                        self.gear_guesses[best_idx + 1] = best_gears[[2], :]
+
             else:  # don't repeat the repetitions if no-one improved cost
                 break
 
-        return np.vstack([self.control_guesses[i][:, [0]] for i in range(n)])
+        if DISCRETE_GEARS:
+            return np.vstack(
+                (
+                    np.vstack([self.control_guesses[i][:, [0]] for i in range(n)]),
+                    np.vstack([self.gear_guesses[i][:, [0]] for i in range(n)]),
+                )
+            )
+        else:
+            return np.vstack([self.control_guesses[i][:, [0]] for i in range(n)])
 
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         self.agents[0].mpc.set_leader_traj(leader_state[:, timestep : timestep + N + 1])
@@ -430,6 +483,11 @@ class TrackingEventBasedCoordinator(MldAgent):
                 (self.control_guesses[i][:, 1:], self.control_guesses[i][:, -1:]),
                 axis=1,
             )
+            if DISCRETE_GEARS:
+                self.gear_guesses[i] = np.concatenate(
+                    (self.gear_guesses[i][:, 1:], self.gear_guesses[i][:, -1:]),
+                    axis=1,
+                )
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -445,6 +503,11 @@ class TrackingEventBasedCoordinator(MldAgent):
             self.control_guesses[i] = acc.get_u_for_constant_vel(xl[1, :]) * np.ones(
                 (nu_l, N)
             )
+            if DISCRETE_GEARS:
+                # for a gear guess we use twa mapping from speed to gear
+                self.gear_guesses[i] = acc.get_pwa_gear_from_speed(xl[1, :]) * np.ones(
+                    (nu_l, N)
+                )
 
         return super().on_episode_start(env, episode)
 
@@ -460,11 +523,19 @@ class TrackingEventBasedCoordinator(MldAgent):
 
 # env
 env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
+
+if DISCRETE_GEARS:
+    mpc_class = LocalMpcGear
+    systems = friction_pwa_systems
+else:
+    mpc_class = LocalMpc
+    systems = full_pwa_systems
+
 # coordinator
 local_mpcs: list[LocalMpc] = []
 for i in range(n):
     # passing local system
-    local_mpcs.append(LocalMpc(systems[i], N, i + 1, n))
+    local_mpcs.append(mpc_class(systems[i], N, i + 1, n))
 agent = TrackingEventBasedCoordinator(local_mpcs)
 
 agent.evaluate(env=env, episodes=1, seed=1)
