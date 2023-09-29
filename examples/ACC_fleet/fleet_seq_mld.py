@@ -7,6 +7,7 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
+from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
@@ -47,7 +48,8 @@ G_map = g_map(Adj)
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-system = acc.get_pwa_system()
+full_system = acc.get_pwa_system()
+friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
@@ -62,7 +64,9 @@ class LocalMpcMld(MpcMld):
         self, system: dict, N: int, leader: bool = False, trailer: bool = False
     ) -> None:
         super().__init__(system, N)
+        self.setup_cost_and_constraints(self.u, leader, trailer)
 
+    def setup_cost_and_constraints(self, u, leader=False, trailer=False):
         if COST_2_NORM:
             cost_func = self.min_2_norm
         else:
@@ -100,7 +104,7 @@ class LocalMpcMld(MpcMld):
         for k in range(N):
             obj += cost_func(self.x[:, [k]] - self.x_front[:, [k]] - temp_sep, Q_x_l)
             obj += (
-                cost_func(self.u[:, [k]], Q_u_l)
+                cost_func(u[:, [k]], Q_u_l)
                 + w * self.s_front[:, k]
                 + w * self.s_back[:, k]
             )
@@ -117,13 +121,15 @@ class LocalMpcMld(MpcMld):
             # safe distance constraints
             if not leader:
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] - self.s_front[:, [k]] <= self.x_front[0, [k]] - d_safe,
+                    self.x[0, [k]] - self.s_front[:, [k]]
+                    <= self.x_front[0, [k]] - d_safe,
                     name=f"safety_ahead_{k}",
-            )
+                )
 
             if not trailer:
                 self.mpc_model.addConstr(
-                    self.x[0, [k]] + self.s_back[:, [k]] >= self.x_back[0, [k]] + d_safe,
+                    self.x[0, [k]] + self.s_back[:, [k]]
+                    >= self.x_back[0, [k]] + d_safe,
                     name=f"safety_behind_{k}",
                 )
 
@@ -153,6 +159,15 @@ class LocalMpcMld(MpcMld):
         for k in range(N + 1):
             self.x_back[:, [k]].lb = x_back[:, [k]]
             self.x_back[:, [k]].ub = x_back[:, [k]]
+
+
+class LocalMpcGear(LocalMpcMld, MpcGear):
+    def __init__(
+        self, system: dict, N: int, leader: bool = False, trailer: bool = False
+    ) -> None:
+        super().__init__(system, N)
+        self.setup_gears(N, acc)
+        self.setup_cost_and_constraints(self.u_g, leader, trailer)
 
 
 class TrackingSequentialMldCoordinator(MldAgent):
@@ -199,7 +214,16 @@ class TrackingSequentialMldCoordinator(MldAgent):
                     self.agents[i].mpc.set_x_back(x_pred_behind)
 
             u[i] = self.agents[i].get_control(xl)
-        return np.vstack(u)
+        if DISCRETE_GEARS:
+            # stack the continuous conttrol at the front and the discrete at the back
+            return np.vstack(
+                (
+                    np.vstack([u[i][:nu_l, :] for i in range(n)]),
+                    np.vstack([u[i][nu_l:, :] for i in range(n)]),
+                )
+            )
+        else:
+            return np.vstack(u)
 
     # here we set the leader cost because it is independent of other vehicles' states
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
@@ -215,16 +239,23 @@ class TrackingSequentialMldCoordinator(MldAgent):
 
 # env
 env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
+
+if DISCRETE_GEARS:
+    mpc_class = LocalMpcGear
+    system = friction_system
+else:
+    mpc_class = LocalMpcMld
+    system = full_system
 # coordinator
 local_mpcs: list[MpcMld] = []
 for i in range(n):
     # passing local system
     if i == 0:
-        local_mpcs.append(LocalMpcMld(system, N, leader=True))
+        local_mpcs.append(mpc_class(system, N, leader=True))
     elif i == n - 1:
-        local_mpcs.append(LocalMpcMld(system, N, trailer=True))
+        local_mpcs.append(mpc_class(system, N, trailer=True))
     else:
-        local_mpcs.append(LocalMpcMld(system, N))
+        local_mpcs.append(mpc_class(system, N))
 agent = TrackingSequentialMldCoordinator(local_mpcs)
 
 agent.evaluate(env=env, episodes=1, seed=1)
