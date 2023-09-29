@@ -20,7 +20,7 @@ np.random.seed(1)
 n = 2  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = False
+DISCRETE_GEARS = True
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -167,7 +167,7 @@ class LocalMpcGear(LocalMpcMld, MpcGear):
         self, system: dict, N: int, leader: bool = False, trailer: bool = False
     ) -> None:
         MpcGear.__init__(self, system, N)
-        self.setup_gears(N, acc)
+        self.setup_gears(N, acc, system["F"], system["G"])
         self.setup_cost_and_constraints(self.u_g, leader, trailer)
 
 

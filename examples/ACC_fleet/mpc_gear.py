@@ -23,9 +23,8 @@ class MpcGear(MpcMld):
 
         # init the PWA system as normal
         super().__init__(system, N)
-        self.system = system
 
-    def setup_gears(self, N: int, acc: ACC):
+    def setup_gears(self, N: int, acc: ACC, F: np.ndarray, G: np.ndarray):
         # now we constrain the input u to include the gears
 
         nu = self.u.shape[0]
@@ -53,20 +52,25 @@ class MpcGear(MpcMld):
         )
 
         # constraints along prediction horizon
+
+        # first remove control constraints and readd them to u_g
+        target_prefix = "control constraints"
+        self.mpc_model.update()
+        matching_constraints = [
+            constr
+            for constr in self.mpc_model.getConstrs()
+            if constr.ConstrName.startswith(target_prefix)
+        ]
+        if len(matching_constraints) == 0:
+            raise RuntimeError(
+                "Couldn't get control constraint when creating gear MPC."
+            )
+        for constr in matching_constraints:
+            self.mpc_model.remove(constr)
+
         for k in range(N):
-            # remove control constraints, as we make new control variable
-            self.mpc_model.update()
-            for i in range(self.m * 2):
-                control_cnstr = self.mpc_model.getConstrByName(
-                    f"control constraints_{k}[{i},0]"
-                )
-                if control_cnstr is None:
-                    raise RuntimeError(
-                        "Couldn't get control constraint when creating gear MPC."
-                    )
-                self.mpc_model.remove(control_cnstr)
             self.mpc_model.addConstr(
-                self.system["F"] @ u_g[:, [k]] <= self.system["G"],
+                F @ u_g[:, [k]] <= G,
                 name="new control constraints",
             )
 
@@ -120,7 +124,7 @@ class MpcGear(MpcMld):
                     gears[i, k] = sig[:, i, k].argmax() + 1
         else:
             u_g = np.zeros((self.m, self.N))
-            gears = np.ones((self.m, 1))  # default set all gears to one if infeas
+            gears = np.ones((self.m, self.N))  # default set all gears to one if infeas
 
         info["u"] = u_g
         self.gears_pred = gears

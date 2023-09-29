@@ -11,6 +11,7 @@ from gymnasium.wrappers import TimeLimit
 from mpc_gear import MpcGear
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
+from scipy.linalg import block_diag
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
@@ -24,7 +25,7 @@ SAVE = False
 n = 2  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = False
+DISCRETE_GEARS = True
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -125,10 +126,12 @@ class MPCMldCent(MpcMldCentDecup):
             self.leader_traj[:, [k]].lb = leader_traj[:, [k]]
 
 
-class MpcGearCent(MPCMldCent, MpcGear):
+class MpcGearCent(MPCMldCent, MpcMldCentDecup, MpcGear):
     def __init__(self, system: dict, n: int, N: int) -> None:
-        MpcGear.__init__(self, system, n, N)  # use the MpcMld constructor
-        self.setup_gears(N, acc)
+        MpcMldCentDecup.__init__(self, system, n, N)  # use the MpcMld constructor
+        F = block_diag(*([system["F"]] * n))
+        G = np.vstack([system["G"]] * n)
+        self.setup_gears(N, acc, F, G)
         self.setup_cost_and_constraints(self.u_g)
 
 
