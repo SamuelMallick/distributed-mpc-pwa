@@ -17,7 +17,7 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(1)
 
-n = 2  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = True
@@ -91,9 +91,9 @@ class LocalMpcMld(MpcMld):
         # setting these bounds to zero removes the slack var, as leader and trailer
         # dont have cars in front or behind respectively
         if leader:
-            self.s_back.ub = 0
-        if trailer:
             self.s_front.ub = 0
+        if trailer:
+            self.s_back.ub = 0
 
         obj = 0
         if leader:

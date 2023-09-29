@@ -2,10 +2,8 @@ import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
-from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
@@ -13,20 +11,19 @@ from plot_fleet import plot_fleet
 from scipy.linalg import block_diag
 
 from dmpcpwa.agents.mld_agent import MldAgent
-from dmpcpwa.mpc.mpc_mld import MpcMld
-from dmpcpwa.utils.pwa_models import cent_from_dist
+from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(1)
 
-n = 2  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = False
+DISCRETE_GEARS = True
 
 threshold = 1  # cost improvement must be more than this to consider communication
 
 w = 1e4  # slack variable penalty
-ep_len = 50  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
@@ -38,6 +35,7 @@ Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
+
 
 class LocalMpc(MpcMldCentDecup):
     """Mpc for a vehicle with a car in front and behind. Local state has car
@@ -279,13 +277,14 @@ class LocalMpc(MpcMldCentDecup):
 
 class LocalMpcGear(LocalMpc, MpcMldCentDecup, MpcGear):
     def __init__(
-        self, system: dict, n:int, N: int, pos_in_fleet: int, num_vehicles: int
+        self, system: dict, n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
         MpcMldCentDecup.__init__(self, system, n, N)
         F = block_diag(*([system["F"]] * n))
         G = np.vstack([system["G"]] * n)
         self.setup_gears(N, acc, F, G)
         self.setup_cost_and_constraints(self.u_g, pos_in_fleet, num_vehicles)
+
 
 class TrackingEventBasedCoordinator(MldAgent):
     def __init__(
@@ -482,7 +481,7 @@ else:
 local_mpcs: list[LocalMpc] = []
 for i in range(n):
     # passing local system
-    if i == 0 or i == n-1:
+    if i == 0 or i == n - 1:
         local_mpcs.append(mpc_class(system, 2, N, i + 1, n))
     else:
         local_mpcs.append(mpc_class(system, 3, N, i + 1, n))

@@ -251,8 +251,8 @@ class ACC:
 
                 # TODO handle this better
                 # force velocity to be above 2 where PWA dynamics are valid
-                if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
-                    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
+                # if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
+                #    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
 
             x = x_temp
 

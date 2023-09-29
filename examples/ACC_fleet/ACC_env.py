@@ -109,4 +109,5 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self.x = x_new
 
         self.step_counter += 1
+        print(f"step {self.step_counter}")
         return x_new, r, False, False, {}
