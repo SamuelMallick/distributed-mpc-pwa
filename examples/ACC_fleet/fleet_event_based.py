@@ -5,9 +5,9 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
+from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
-from mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
@@ -16,7 +16,7 @@ from dmpcpwa.utils.pwa_models import cent_from_dist
 
 np.random.seed(1)
 
-n = 2  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = True
@@ -24,7 +24,7 @@ DISCRETE_GEARS = True
 threshold = 1  # cost improvement must be more than this to consider communication
 
 w = 1e4  # slack variable penalty
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -224,7 +224,7 @@ class LocalMpc(MpcMld):
                             ),
                             Q_x_l,
                         )
-                        + w * self.s_front_2[:, [k]]
+                        + w * self.s_front_2[:, k]
                     )
         if pos_in_fleet == 1:  # leader
             for k in range(N + 1):
@@ -272,7 +272,7 @@ class LocalMpc(MpcMld):
                             ),
                             Q_x_l,
                         )
-                        + w * self.s_back_2[:, [k]]
+                        + w * self.s_back_2[:, k]
                     )
 
         # control penalty in cost
