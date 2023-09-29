@@ -165,7 +165,7 @@ class LocalMpcGear(LocalMpcMld, MpcGear):
     def __init__(
         self, system: dict, N: int, leader: bool = False, trailer: bool = False
     ) -> None:
-        super().__init__(system, N)
+        MpcGear.__init__(self, system, N)
         self.setup_gears(N, acc)
         self.setup_cost_and_constraints(self.u_g, leader, trailer)
 

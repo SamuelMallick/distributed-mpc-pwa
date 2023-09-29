@@ -177,7 +177,7 @@ class MPCMldCent(MpcMld):
 
 class MpcGearCent(MPCMldCent, MpcGear):
     def __init__(self, system: dict, N: int) -> None:
-        super().__init__(system, N)
+        MpcGear.__init__(self, system, N) # use the MpcMld constructor
         self.setup_gears(N, acc)
         self.setup_cost_and_constraints(self.u_g)
 
