@@ -29,6 +29,42 @@ class MpcMld:
         N:int
             Prediction horizon length."""
 
+        n = system["A"][0].shape[0]
+        m = system["B"][0].shape[1]
+
+        # build mld model
+
+        mpc_model = gp.Model("mld_mpc")
+        mpc_model.setParam("OutputFlag", 0)
+        # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
+
+        # Uncomment if you need to differentiate between infeasbile and unbounded
+        mpc_model.setParam("DualReductions", 0)
+
+        x = mpc_model.addMVar(
+            (n, N + 1), lb=-float("inf"), ub=float("inf"), name="x"
+        )  # state
+        u = mpc_model.addMVar(
+            (m, N), lb=-float("inf"), ub=float("inf"), name="u"
+        )  # control
+
+        # create MLD dynamics from PWA
+        self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N)
+
+        # IC constraint - gets updated everytime solve_mpc is called
+        self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n, 1)), name="IC")
+
+        # assign parts of model to be used by class later
+        self.mpc_model = mpc_model
+        self.x = x
+        self.u = u
+        self.n = n
+        self.m = m
+        self.N = N
+
+        logger.critical("MLD MPC setup complete.")
+
+    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N):
         # extract values from system
         S = system["S"]
         R = system["R"]
@@ -44,18 +80,20 @@ class MpcMld:
         n = A[0].shape[0]
         m = B[0].shape[1]
 
-        # calculate the upper and lower bounds used in the MLD form
-
         M_st = [None] * s  # The upper bound for each region
         model_lin = gp.Model("linear model for mld set-up")
         model_lin.setParam("OutputFlag", 0)
 
-        x = model_lin.addMVar((n, 1), lb=-float("inf"), ub=float("inf"), name="x_lin")
-        u = model_lin.addMVar((m, 1), lb=-float("inf"), ub=float("inf"), name="u_lin")
-        model_lin.addConstr(D @ x <= E, name="state constraints")
-        model_lin.addConstr(F @ u <= G, name="control constraints")
+        x_temp = model_lin.addMVar(
+            (n, 1), lb=-float("inf"), ub=float("inf"), name="x_lin"
+        )
+        u_temp = model_lin.addMVar(
+            (m, 1), lb=-float("inf"), ub=float("inf"), name="u_lin"
+        )
+        model_lin.addConstr(D @ x_temp <= E, name="state constraints")
+        model_lin.addConstr(F @ u_temp <= G, name="control constraints")
         for i in range(s):
-            obj = S[i] @ x + R[i] @ u - T[i]
+            obj = S[i] @ x_temp + R[i] @ u_temp - T[i]
             M_st[i] = np.zeros(obj.shape)
             for j in range(obj.shape[0]):
                 model_lin.setObjective(obj[j, 0], gp.GRB.MAXIMIZE)
@@ -74,7 +112,7 @@ class MpcMld:
             M_regions = [None] * s
             m_regions = [None] * s
             for i in range(s):
-                obj = A[i][j, :] @ x + B[i][j, :] @ u + c[i][j, :]
+                obj = A[i][j, :] @ x_temp + B[i][j, :] @ u_temp + c[i][j, :]
                 model_lin.setObjective(obj, gp.GRB.MAXIMIZE)
                 model_lin.update()
                 model_lin.optimize()
@@ -92,22 +130,6 @@ class MpcMld:
             + str(m_lb.T)
             + "'"
         )
-
-        # build mld model
-
-        mpc_model = gp.Model("mld_mpc")
-        mpc_model.setParam("OutputFlag", 1)
-        # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
-
-        # Uncomment if you need to differentiate between infeasbile and unbounded
-        mpc_model.setParam("DualReductions", 0)
-
-        x = mpc_model.addMVar(
-            (n, N + 1), lb=-float("inf"), ub=float("inf"), name="x"
-        )  # state
-        u = mpc_model.addMVar(
-            (m, N), lb=-float("inf"), ub=float("inf"), name="u"
-        )  # control
 
         # auxillary var z has 3 dimensions. (Region, state, time)
         z = mpc_model.addMVar((s, n, N), lb=-float("inf"), ub=float("inf"), name="z")
@@ -188,21 +210,6 @@ class MpcMld:
 
         # trivial terminal constraint condition x(N) = 0
         # mpc_model.addConstr(x[:, [N]] == np.zeros((n, 1)))
-
-        # IC constraint - gets updated everytime solve_mpc is called
-        self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n, 1)), name="IC")
-
-        # assign parts of model to be used by class later
-        self.mpc_model = mpc_model
-        self.x = x
-        self.u = u
-        self.z = z
-        self.delta = delta
-        self.n = n
-        self.m = m
-        self.N = N
-
-        logger.critical("MLD MPC setup complete.")
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
         """Set cost of the MIP as sum_k x(k)' * Q_x * x(k) + u(k)' * Q_u * u(k).
