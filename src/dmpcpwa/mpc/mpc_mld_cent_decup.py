@@ -32,20 +32,8 @@ class MpcMldCentDecup(MpcMld):
         N:int
             Prediction horizon length."""
 
-        # extract values from system
-        S = system["S"]
-        system["R"]
-        system["T"]
-        A = system["A"]
-        B = system["B"]
-        system["c"]
-        system["D"]
-        system["E"]
-        system["F"]
-        system["G"]
-        s = len(S)  # number of PWA regions
-        nx_l = A[0].shape[0]
-        nu_l = B[0].shape[1]
+        nx_l = system["A"][0].shape[0]
+        nu_l = system["B"][0].shape[1]
 
         # build mld model
 
