@@ -19,8 +19,8 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(1)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
 n = 3  # num cars
 N = 5  # controller horizon
