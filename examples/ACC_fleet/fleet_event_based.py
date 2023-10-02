@@ -1,3 +1,5 @@
+import sys
+
 import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
@@ -19,6 +21,15 @@ n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = True
+
+if len(sys.argv) > 1:
+    n = int(sys.argv[1])
+if len(sys.argv) > 2:
+    N = int(sys.argv[2])
+if len(sys.argv) > 3:
+    COST_2_NORM = bool(int(sys.argv[3]))
+if len(sys.argv) > 4:
+    DISCRETE_GEARS = bool(int(sys.argv[4]))
 
 threshold = 1  # cost improvement must be more than this to consider communication
 

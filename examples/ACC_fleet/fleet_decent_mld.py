@@ -27,7 +27,9 @@ if len(sys.argv) > 1:
 if len(sys.argv) > 2:
     N = int(sys.argv[2])
 if len(sys.argv) > 3:
-    COST_2_NORM = bool(sys.argv[3])
+    COST_2_NORM = bool(int(sys.argv[3]))
+if len(sys.argv) > 4:
+    DISCRETE_GEARS = bool(int(sys.argv[4]))
 
 w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
