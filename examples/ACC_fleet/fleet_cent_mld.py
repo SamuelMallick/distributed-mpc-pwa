@@ -19,13 +19,13 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(1)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
-n = 2  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = True
+DISCRETE_GEARS = False
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -33,6 +33,8 @@ if len(sys.argv) > 2:
     N = int(sys.argv[2])
 if len(sys.argv) > 3:
     COST_2_NORM = bool(sys.argv[3])
+if len(sys.argv) > 4:
+    DISCRETE_GEARS = bool(sys.argv[4])
 
 w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
