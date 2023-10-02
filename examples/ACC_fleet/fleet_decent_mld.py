@@ -20,7 +20,7 @@ np.random.seed(1)
 n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = True
+DISCRETE_GEARS = False
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])

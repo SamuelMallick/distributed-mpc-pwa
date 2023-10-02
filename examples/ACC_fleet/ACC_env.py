@@ -34,9 +34,10 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
-        starting_positions = [
-            300 * np.random.random() for i in range(self.n)
-        ]  # starting positions between 0-400 m
+        #starting_positions = [
+        #    300 * np.random.random() for i in range(self.n)
+        #]  # starting positions between 0-400 m
+        starting_positions = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450]
         starting_velocities = [
             30 * np.random.random() + 5 for i in range(self.n)
         ]  # starting velocities between 5-35 ms-1

@@ -185,7 +185,7 @@ class ACC:
         # generate trajectory of leader
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
-        leader_initial_pos = 400
+        leader_initial_pos = 600
         leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
         for k in range(ep_len + N):
             leader_state[:, [k + 1]] = leader_state[:, [k]] + self.ts * np.array(
