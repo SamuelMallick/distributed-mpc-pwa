@@ -281,5 +281,13 @@ class MpcMld:
             logger.info("Infeasible")
 
         run_time = self.mpc_model.Runtime
+        nodes = self.mpc_model.NodeCount
+
         self.mpc_model.NodeCount
-        return u[:, [0]], {"x": x, "u": u, "cost": cost, "run_time": run_time}
+        return u[:, [0]], {
+            "x": x,
+            "u": u,
+            "cost": cost,
+            "run_time": run_time,
+            "nodes": nodes,
+        }
