@@ -17,13 +17,13 @@ from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
-np.random.seed(1)
+np.random.seed(3)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
 n = 3  # num cars
-N = 5  # controller horizon
+N = 7  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 
@@ -37,7 +37,7 @@ if len(sys.argv) > 4:
     DISCRETE_GEARS = bool(int(sys.argv[4]))
 
 w = 1e4  # slack variable penalty
-ep_len = 100  # length of episode (sim len)
+ep_len = 200  # length of episode (sim len)
 
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
@@ -47,7 +47,6 @@ Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
-full_system = acc.get_pwa_system()
 friction_system = acc.get_friction_pwa_system()
 
 
@@ -162,7 +161,8 @@ if DISCRETE_GEARS:
     agent = TrackingMldAgent(mpc)
 else:
     # mld mpc
-    mld_mpc = MPCMldCent(full_system, n, N)
+    systems = [acc.get_pwa_system(i) for i in range(n)]
+    mld_mpc = MPCMldCent(systems, n, N)
     # initialise the cost with the first tracking point
     mld_mpc.set_leader_traj(leader_state[:, 0 : N + 1])
     agent = TrackingMldAgent(mld_mpc)

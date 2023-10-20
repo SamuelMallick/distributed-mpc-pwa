@@ -18,13 +18,13 @@ class MpcMldCentDecup(MpcMld):
     """ "An mpc that converts the networked PWA mpc problem to MLD form.
     The PWA systems are assumed decoupled in the dynamics."""
 
-    def __init__(self, system: dict, n: int, N: int) -> None:
+    def __init__(self, systems: list[dict], n: int, N: int) -> None:
         """Instantiate the mpc.
 
         Parameters
         ----------
-        system: dict
-            Dictionary containing the definition of the PWA system {S, R, T, A, B, c, D, E, F, G}.
+        system: List[dict]
+            List of dictionary which contain the definitions of the PWA systems {S, R, T, A, B, c, D, E, F, G}.
              When S[i]x+R[x]u <= T[i] -> x+ = A[i]x + B[i]u + c[i].
              For MLD conversion the state and input must be constrained: Dx <= E, Fu <= G.
         n: int
@@ -32,8 +32,8 @@ class MpcMldCentDecup(MpcMld):
         N:int
             Prediction horizon length."""
 
-        nx_l = system["A"][0].shape[0]
-        nu_l = system["B"][0].shape[1]
+        nx_l = systems[0]["A"][0].shape[0]
+        nu_l = systems[0]["B"][0].shape[1]
 
         # build mld model
 
@@ -56,7 +56,7 @@ class MpcMldCentDecup(MpcMld):
             x_l = x[nx_l * i : nx_l * (i + 1), :]
             u_l = u[nu_l * i : nu_l * (i + 1), :]
 
-            self.create_MLD_dynamics_and_constraints(system, mpc_model, x_l, u_l, N)
+            self.create_MLD_dynamics_and_constraints(systems[i], mpc_model, x_l, u_l, N)
 
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n * nx_l, 1)), name="IC")

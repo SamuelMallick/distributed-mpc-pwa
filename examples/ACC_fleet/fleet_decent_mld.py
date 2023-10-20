@@ -15,10 +15,10 @@ from plot_fleet import plot_fleet
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
-np.random.seed(1)
+np.random.seed(3)
 
-n = 3  # num cars
-N = 5  # controller horizon
+n = 4  # num cars
+N = 7  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 
@@ -50,7 +50,6 @@ G_map = g_map(Adj)
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-full_system = acc.get_pwa_system()
 friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
@@ -250,21 +249,21 @@ env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_l
 
 if DISCRETE_GEARS:
     mpc_class = LocalMpcGear
-    system = friction_system
+    systems = [friction_system for i in range(n)]
 else:
     mpc_class = LocalMpcMld
-    system = full_system
+    systems = [acc.get_pwa_system(i) for i in range(n)]
 
 # coordinator
 local_mpcs: list[MpcMld] = []
 for i in range(n):
     # passing local system
     if i == 0:
-        local_mpcs.append(mpc_class(system, N, leader=True))
+        local_mpcs.append(mpc_class(systems[i], N, leader=True))
     elif i == n - 1:
-        local_mpcs.append(mpc_class(system, N, trailer=True))
+        local_mpcs.append(mpc_class(systems[i], N, trailer=True))
     else:
-        local_mpcs.append(mpc_class(system, N))
+        local_mpcs.append(mpc_class(systems[i], N))
 agent = TrackingDecentMldCoordinator(local_mpcs, nx_l, nu_l)
 
 agent.evaluate(env=env, episodes=1, seed=1)

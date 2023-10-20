@@ -15,12 +15,12 @@ from scipy.linalg import block_diag
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
-np.random.seed(1)
+np.random.seed(3)
 
-n = 3  # num cars
-N = 5  # controller horizon
+n = 4  # num cars
+N = 7  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = True
+DISCRETE_GEARS = False
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -39,7 +39,6 @@ ep_len = 100  # length of episode (sim len)
 acc = ACC(ep_len, N)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-full_system = acc.get_pwa_system()
 friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
@@ -53,9 +52,9 @@ class LocalMpc(MpcMldCentDecup):
     is organised with x = [x_front, x_me, x_back]."""
 
     def __init__(
-        self, system: dict, n: int, N: int, pos_in_fleet: int, num_vehicles: int
+        self, systems: list[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
-        super().__init__(system, n, N)
+        super().__init__(systems, n, N)
         self.setup_cost_and_constraints(self.u, pos_in_fleet, num_vehicles)
 
     def setup_cost_and_constraints(self, u, pos_in_fleet, num_vehicles):
@@ -288,11 +287,11 @@ class LocalMpc(MpcMldCentDecup):
 
 class LocalMpcGear(LocalMpc, MpcMldCentDecup, MpcGear):
     def __init__(
-        self, system: dict, n: int, N: int, pos_in_fleet: int, num_vehicles: int
+        self, systems: list[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
-        MpcMldCentDecup.__init__(self, system, n, N)
-        F = block_diag(*([system["F"]] * n))
-        G = np.vstack([system["G"]] * n)
+        MpcMldCentDecup.__init__(self, systems, n, N)
+        F = block_diag(*([systems[0]["F"]] * n))
+        G = np.vstack([systems[0]["G"]] * n)
         self.setup_gears(N, acc, F, G)
         self.setup_cost_and_constraints(self.u_g, pos_in_fleet, num_vehicles)
 
@@ -483,19 +482,19 @@ env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_l
 
 if DISCRETE_GEARS:
     mpc_class = LocalMpcGear
-    system = friction_system
+    systems = [friction_system for i in range(n)]
 else:
     mpc_class = LocalMpc
-    system = full_system
+    systems = [acc.get_pwa_system(i) for i in range(n)]
 
 # coordinator
 local_mpcs: list[LocalMpc] = []
 for i in range(n):
     # passing local system
     if i == 0 or i == n - 1:
-        local_mpcs.append(mpc_class(system, 2, N, i + 1, n))
+        local_mpcs.append(mpc_class(systems, 2, N, i + 1, n))
     else:
-        local_mpcs.append(mpc_class(system, 3, N, i + 1, n))
+        local_mpcs.append(mpc_class(systems, 3, N, i + 1, n))
 
 agent = TrackingEventBasedCoordinator(local_mpcs)
 

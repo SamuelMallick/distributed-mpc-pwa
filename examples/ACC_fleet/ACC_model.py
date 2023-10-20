@@ -18,7 +18,15 @@ class ACC:
     sep = np.array([[-50], [0]])  # desired seperation between vehicles states
 
     mass = 800  # mass
-    m_inhom = [800, 1200, 900, 850, 1500, 1950, 2670]   # mass value for inhomogenous platoon
+    m_inhom = [
+        800,
+        1900,
+        900,
+        1400,
+        1500,
+        1950,
+        2670,
+    ]  # mass value for inhomogenous platoon
     c_fric = 0.5  # viscous friction coefficient
     mu = 0.01  # coulomb friction coefficient
     grav = 9.8  # gravity accel
@@ -222,8 +230,34 @@ class ACC:
             ) + self.ts * np.array([[leader_speed], [0]])
         return leader_state
 
+    def leader_state_3(self, ep_len, N):
+        leader_state = np.zeros((2, ep_len + N + 1))
+        leader_speed = 20
+        leader_initial_pos = 600
+        leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
+        for k in range(int(ep_len / 4)):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        leader_speed = 30
+        for k in range(int(ep_len / 4), int(1 * ep_len / 2)):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        leader_speed = 10
+        for k in range(int(1 * ep_len / 2), int(3 * ep_len / 4)):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        leader_speed = 20
+        for k in range(int(3 * ep_len / 4), ep_len + N):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        return leader_state
+
     def __init__(self, ep_len, N):
-        self.leader_state = self.leader_state_2(ep_len, N)
+        self.leader_state = self.leader_state_3(ep_len, N)
 
     def get_pwa_gear_from_speed(self, v):
         """Get the gear j from the speed v, by the PWA model."""
@@ -248,7 +282,7 @@ class ACC:
         gear = int(j)
         return self.b[gear - 1]
 
-    def get_pwa_system(self, index = None):
+    def get_pwa_system(self, index=None):
         """Get the full pwa system dictionary."""
         if index is None:
             return self.build_full_pwa_system(self.mass)
@@ -259,13 +293,17 @@ class ACC:
         return self.build_friction_pwa_system(self.mass)
 
     # the true non-linear dynamics of the car
-    def step_car_dynamics_nl(self, x, u, j, n, ts):
+    def step_car_dynamics_nl(self, x, u, j, n, ts, homog=True):
         """Steps the car dynamics for n cars with non-linear model by ts seconds. x is state, u is control, j is gears."""
         num_steps = 10
         DT = ts / num_steps
         for t in range(num_steps):
             x_temp = np.zeros(x.shape)
             for i in range(n):
+                if homog:
+                    mass = self.mass
+                else:
+                    mass = self.m_inhom[i]
                 x_l = x[self.nx_l * i : self.nx_l * (i + 1), :]  # get local state
                 u_l = u[self.nu_l * i : self.nu_l * (i + 1), :]  # get local control
                 j_l = j[self.nu_l * i : self.nu_l * (i + 1), :]  # get local gear
@@ -273,20 +311,20 @@ class ACC:
                     [
                         [x_l[1, 0]],
                         [
-                            -(self.c_fric * x_l[1, 0] ** 2) / (self.mass)
+                            -(self.c_fric * x_l[1, 0] ** 2) / (mass)
                             - self.mu * self.grav
                         ],
                     ]
                 )
-                B = np.array([[0], [self.get_traction_from_gear(j_l) / self.mass]])
+                B = np.array([[0], [self.get_traction_from_gear(j_l) / mass]])
                 x_temp[self.nx_l * i : self.nx_l * (i + 1), :] = x_l + DT * (
                     f + B * u_l
                 )
 
                 # TODO handle this better
                 # force velocity to be above 2 where PWA dynamics are valid
-                if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
-                    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
+                # if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
+                #    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
 
             x = x_temp
 
@@ -316,25 +354,24 @@ class ACC:
 
         return x_temp
 
-    def get_u_for_constant_vel(self, v):
+    def get_u_for_constant_vel(self, v, index=None):
         """returns the control input which will keep the velocity v constant, as by the PWA dynamics."""
-
         x = np.array([[0], [v[0]]])  # first state does not matter for this pwa sys
         u = np.array([[0]])  # neither does control
 
-        for j in range(len(self.pwa_system["S"])):
+        pwa_system = self.get_pwa_system(index)
+
+        for j in range(len(pwa_system["S"])):
             if all(
-                self.pwa_system["S"][j] @ x + self.pwa_system["R"][j] @ u
-                <= self.pwa_system["T"][j]
+                pwa_system["S"][j] @ x + pwa_system["R"][j] @ u
+                <= pwa_system["T"][j]
                 + np.array(
                     [[0], [1e-4]]
                 )  # buffer is to have one of the as a strict inequality
             ):
                 # This is VERY specific to this system, DO NOT reuse this code on other PWA systems.
-                return (1 / self.pwa_system["B"][j][1, 0]) * (
-                    v
-                    - self.pwa_system["A"][j][1, 1] * v
-                    - self.pwa_system["c"][j][1, 0]
+                return (1 / pwa_system["B"][j][1, 0]) * (
+                    v - pwa_system["A"][j][1, 1] * v - pwa_system["c"][j][1, 0]
                 )
 
         raise RuntimeError("Didn't find any PWa region for the given speed!")
