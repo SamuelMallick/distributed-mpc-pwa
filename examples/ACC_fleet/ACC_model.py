@@ -18,6 +18,7 @@ class ACC:
     sep = np.array([[-50], [0]])  # desired seperation between vehicles states
 
     mass = 800  # mass
+    m_inhom = [800, 1200, 900, 850, 1500, 1950, 2670]   # mass value for inhomogenous platoon
     c_fric = 0.5  # viscous friction coefficient
     mu = 0.01  # coulomb friction coefficient
     grav = 9.8  # gravity accel
@@ -25,7 +26,7 @@ class ACC:
     w_max = 630  # max rot speed rad/s
 
     x1_min = 0  # min pos
-    x1_max = 3000  # max_pos
+    x1_max = 20000  # max_pos
     x2_min = 3.94  # min velocity
     x2_max = 45.84  # max velocity
     u_max = 1  # max throttle/brake
@@ -53,135 +54,142 @@ class ACC:
     for i in range(1, 6):
         v_gear_lim.append((vh[i] - vl[i]) / 2 + vl[i])
 
-    # build full PWA system
-    s = 7  # 7 PWA regions
-    r = 2  # number of rows in Sx + RU <= T conditions
-    S = []
-    R = []
-    T = []
-    A = []
-    B = []
-    c = []
+    def build_full_pwa_system(self, mass):
+        # build full PWA system
+        s = 7  # 7 PWA regions
+        r = 2  # number of rows in Sx + RU <= T conditions
+        S = []
+        R = []
+        T = []
+        A = []
+        B = []
+        c = []
 
-    for i in range(s):
-        S.append(np.array([[0, 1], [0, -1]]))
-        R.append(np.zeros((r, 1)))
+        for i in range(s):
+            S.append(np.array([[0, 1], [0, -1]]))
+            R.append(np.zeros((r, 1)))
 
-    # manually append the limits
-    T.append(np.array([[v_gear_lim[0]], [-x2_min]]))
-    T.append(np.array([[v_gear_lim[1]], [-v_gear_lim[0]]]))
-    T.append(np.array([[v_gear_lim[2]], [-v_gear_lim[1]]]))
-    T.append(np.array([[alpha], [v_gear_lim[2]]]))
-    T.append(np.array([[v_gear_lim[3]], [-alpha]]))
-    T.append(np.array([[v_gear_lim[4]], [-v_gear_lim[3]]]))
-    T.append(np.array([[x2_max], [-v_gear_lim[4]]]))
+        # manually append the limits
+        T.append(np.array([[self.v_gear_lim[0]], [-self.x2_min]]))
+        T.append(np.array([[self.v_gear_lim[1]], [-self.v_gear_lim[0]]]))
+        T.append(np.array([[self.v_gear_lim[2]], [-self.v_gear_lim[1]]]))
+        T.append(np.array([[self.alpha], [self.v_gear_lim[2]]]))
+        T.append(np.array([[self.v_gear_lim[3]], [-self.alpha]]))
+        T.append(np.array([[self.v_gear_lim[4]], [-self.v_gear_lim[3]]]))
+        T.append(np.array([[self.x2_max], [-self.v_gear_lim[4]]]))
 
-    # manually append the A matrices - first three regions have c1 and last four have c2 for friction
-    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
+        # manually append the A matrices - first three regions have c1 and last four have c2 for friction
+        A.append(np.array([[0, 1], [0, -(self.c1) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c1) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c1) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c1) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c2) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c2) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c2) / (mass)]]))
 
-    # manually append B matrices
-    B.append(np.array([[0], [(b[0]) / (mass)]]))
-    B.append(np.array([[0], [(b[1]) / (mass)]]))
-    B.append(np.array([[0], [(b[2]) / (mass)]]))
-    # fourth and fifth share same gear as the split is over the friction coeff
-    B.append(np.array([[0], [(b[3]) / (mass)]]))
-    B.append(np.array([[0], [(b[3]) / (mass)]]))
-    B.append(np.array([[0], [(b[4]) / (mass)]]))
-    B.append(np.array([[0], [(b[5]) / (mass)]]))
+        # manually append B matrices
+        B.append(np.array([[0], [(self.b[0]) / (mass)]]))
+        B.append(np.array([[0], [(self.b[1]) / (mass)]]))
+        B.append(np.array([[0], [(self.b[2]) / (mass)]]))
+        # fourth and fifth share same gear as the split is over the friction coeff
+        B.append(np.array([[0], [(self.b[3]) / (mass)]]))
+        B.append(np.array([[0], [(self.b[3]) / (mass)]]))
+        B.append(np.array([[0], [(self.b[4]) / (mass)]]))
+        B.append(np.array([[0], [(self.b[5]) / (mass)]]))
 
-    # manually append c matrices - last four regions have offset d due to friction PWA
-    c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav - d / mass]]))
-    c.append(np.array([[0], [-mu * grav - d / mass]]))
-    c.append(np.array([[0], [-mu * grav - d / mass]]))
+        # manually append c matrices - last four regions have offset d due to friction PWA
+        c.append(np.array([[0], [-self.mu * self.grav]]))
+        c.append(np.array([[0], [-self.mu * self.grav]]))
+        c.append(np.array([[0], [-self.mu * self.grav]]))
+        c.append(np.array([[0], [-self.mu * self.grav]]))
+        c.append(np.array([[0], [-self.mu * self.grav - self.d / mass]]))
+        c.append(np.array([[0], [-self.mu * self.grav - self.d / mass]]))
+        c.append(np.array([[0], [-self.mu * self.grav - self.d / mass]]))
 
-    # discretise the dynamics
-    Ad = []
-    Bd = []
-    cd = []
-    for i in range(s):
-        Ad_i, Bd_i, cd_i = forward_euler(A[i], B[i], ts, c[i])
-        Ad.append(Ad_i)
-        Bd.append(Bd_i)
-        cd.append(cd_i)
+        # discretise the dynamics
+        Ad = []
+        Bd = []
+        cd = []
+        for i in range(s):
+            Ad_i, Bd_i, cd_i = forward_euler(A[i], B[i], self.ts, c[i])
+            Ad.append(Ad_i)
+            Bd.append(Bd_i)
+            cd.append(cd_i)
 
-    D = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
-    E = np.array([[x1_max], [-x1_min], [x2_max], [-x2_min]])
-    F = np.array([[1], [-1]])
-    G = np.array([[u_max], [u_max]])
+        D = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        E = np.array([[self.x1_max], [-self.x1_min], [self.x2_max], [-self.x2_min]])
+        F = np.array([[1], [-1]])
+        G = np.array([[self.u_max], [self.u_max]])
 
-    pwa_system = {
-        "S": S,
-        "R": R,
-        "T": T,
-        "A": Ad,
-        "B": Bd,
-        "c": cd,
-        "D": D,
-        "E": E,
-        "F": F,
-        "G": G,
-    }
+        return {
+            "S": S,
+            "R": R,
+            "T": T,
+            "A": Ad,
+            "B": Bd,
+            "c": cd,
+            "D": D,
+            "E": E,
+            "F": F,
+            "G": G,
+        }
 
-    # build smaller PWA system for just the friction, which is used with dicrete input model of gears
-    s = 2  # 7 PWA regions
-    r = 2  # number of rows in Sx + RU <= T conditions
-    S = []
-    R = []
-    T = []
-    A = []
-    B = []
-    c = []
+    def build_friction_pwa_system(self, mass):
+        # build smaller PWA system for just the friction, which is used with dicrete input model of gears
+        s = 2  # 7 PWA regions
+        r = 2  # number of rows in Sx + RU <= T conditions
+        S = []
+        R = []
+        T = []
+        A = []
+        B = []
+        c = []
 
-    for i in range(s):
-        S.append(np.array([[0, 1], [0, -1]]))
-        R.append(np.zeros((r, 1)))
+        for i in range(s):
+            S.append(np.array([[0, 1], [0, -1]]))
+            R.append(np.zeros((r, 1)))
 
-    T.append(np.array([[alpha], [-x2_min]]))
-    T.append(np.array([[x2_max], [-alpha]]))
+        T.append(np.array([[self.alpha], [-self.x2_min]]))
+        T.append(np.array([[self.x2_max], [-self.alpha]]))
 
-    A.append(np.array([[0, 1], [0, -(c1) / (mass)]]))
-    A.append(np.array([[0, 1], [0, -(c2) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c1) / (mass)]]))
+        A.append(np.array([[0, 1], [0, -(self.c2) / (mass)]]))
 
-    B.append(np.array([[0], [(1) / (mass)]]))
-    B.append(np.array([[0], [(1) / (mass)]]))
+        B.append(np.array([[0], [(1) / (mass)]]))
+        B.append(np.array([[0], [(1) / (mass)]]))
 
-    c.append(np.array([[0], [-mu * grav]]))
-    c.append(np.array([[0], [-mu * grav - d / mass]]))
+        c.append(np.array([[0], [-self.mu * self.grav]]))
+        c.append(np.array([[0], [-self.mu * self.grav - self.d / mass]]))
 
-    # discretise the dynamics
-    Ad = []
-    Bd = []
-    cd = []
-    for i in range(s):
-        Ad_i, Bd_i, cd_i = forward_euler(A[i], B[i], ts, c[i])
-        Ad.append(Ad_i)
-        Bd.append(Bd_i)
-        cd.append(cd_i)
+        # discretise the dynamics
+        Ad = []
+        Bd = []
+        cd = []
+        for i in range(s):
+            Ad_i, Bd_i, cd_i = forward_euler(A[i], B[i], self.ts, c[i])
+            Ad.append(Ad_i)
+            Bd.append(Bd_i)
+            cd.append(cd_i)
 
-    friction_pwa_system = {
-        "S": S,
-        "R": R,
-        "T": T,
-        "A": Ad,
-        "B": Bd,
-        "c": cd,
-        "D": D,
-        "E": E,
-        "F": F,
-        "G": G,
-    }
+        D = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
+        E = np.array([[self.x1_max], [-self.x1_min], [self.x2_max], [-self.x2_min]])
+        F = np.array([[1], [-1]])
+        G = np.array([[self.u_max], [self.u_max]])
 
-    def __init__(self, ep_len, N):
+        return {
+            "S": S,
+            "R": R,
+            "T": T,
+            "A": Ad,
+            "B": Bd,
+            "c": cd,
+            "D": D,
+            "E": E,
+            "F": F,
+            "G": G,
+        }
+
+    def leader_state_1(self, ep_len, N):
         # generate trajectory of leader
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
@@ -191,7 +199,31 @@ class ACC:
             leader_state[:, [k + 1]] = leader_state[:, [k]] + self.ts * np.array(
                 [[leader_speed], [0]]
             )
-        self.leader_state = leader_state
+        return leader_state
+
+    def leader_state_2(self, ep_len, N):
+        leader_state = np.zeros((2, ep_len + N + 1))
+        leader_speed = 20
+        leader_initial_pos = 600
+        leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
+        for k in range(int(ep_len / 4)):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        leader_speed = 30
+        for k in range(int(ep_len / 4), int(1 * ep_len / 2)):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        leader_speed = 20
+        for k in range(int(1 * ep_len / 2), ep_len + N):
+            leader_state[:, [k + 1]] = np.array(
+                [[leader_state[0, k]], [leader_speed]]
+            ) + self.ts * np.array([[leader_speed], [0]])
+        return leader_state
+
+    def __init__(self, ep_len, N):
+        self.leader_state = self.leader_state_2(ep_len, N)
 
     def get_pwa_gear_from_speed(self, v):
         """Get the gear j from the speed v, by the PWA model."""
@@ -216,13 +248,15 @@ class ACC:
         gear = int(j)
         return self.b[gear - 1]
 
-    def get_pwa_system(self):
+    def get_pwa_system(self, index = None):
         """Get the full pwa system dictionary."""
-        return self.pwa_system
+        if index is None:
+            return self.build_full_pwa_system(self.mass)
+        return self.build_full_pwa_system(self.m_inhom[index])
 
     def get_friction_pwa_system(self):
         """Get the friction pwa system dictionary."""
-        return self.friction_pwa_system
+        return self.build_friction_pwa_system(self.mass)
 
     # the true non-linear dynamics of the car
     def step_car_dynamics_nl(self, x, u, j, n, ts):
@@ -251,8 +285,8 @@ class ACC:
 
                 # TODO handle this better
                 # force velocity to be above 2 where PWA dynamics are valid
-                # if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
-                #    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
+                if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
+                    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
 
             x = x_temp
 
