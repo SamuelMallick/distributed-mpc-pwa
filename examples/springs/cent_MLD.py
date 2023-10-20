@@ -13,7 +13,7 @@ SAVE = True
 
 n = 1  # num springs
 
-sim_len = 50
+sim_len = 100
 env = MonitorEpisodes(TimeLimit(SpringNetwork(n), max_episode_steps=sim_len))
 
 agent = NoControlAgent(
@@ -33,4 +33,5 @@ else:
 print(f"Return = {sum(R.squeeze())}")
 
 viz = SpringVizualizer()
-viz.spring_sys_viz(X.T, U.reshape((n, sim_len)), rep=True)
+viz.spring_sys_viz(X.T, U.reshape((n, sim_len)), rep=False)
+viz.create_gif("single")

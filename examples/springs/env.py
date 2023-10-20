@@ -32,7 +32,7 @@ class SpringNetwork(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]])
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
         self.x = np.zeros((2 * self.n, 1))
-        self.x[0:2, :] = np.array([[2], [0]])
+        self.x[0:2, :] = np.array([[4], [0]])
         return self.x, {}
 
     def get_stage_cost(

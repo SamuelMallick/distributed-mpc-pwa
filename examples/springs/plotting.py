@@ -63,7 +63,7 @@ class SpringVizualizer:
             self.fig,
             lambda i: self.animate(i, x, u, x_lim=5, u_lim=20),
             frames=x.shape[1] - 1,
-            interval=1,
+            interval=0.1,
             repeat=rep,
         )
         plt.show()
@@ -73,6 +73,7 @@ class SpringVizualizer:
             raise RuntimeError("must run spring_sys_viz before trying to create gif.")
         frames = []
         for i in range(int(self.sim_len)):
+            print(f"GID: processing frame {i}")
             image = imageio.v2.imread(f"C:/Users/shmallick/Github/tmp/img/img_{i}.png")
             frames.append(image)
             imageio.mimsave(
@@ -80,5 +81,7 @@ class SpringVizualizer:
                 + str(name)
                 + ".gif",  # output gif
                 frames,  # array of input frames
-                fps=5,
+                format="GIF",
+                # fps=100,
+                duration=len(frames) / 1000,
             )

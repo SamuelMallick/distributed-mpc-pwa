@@ -3,11 +3,11 @@ import itertools
 import numpy as np
 from scipy.linalg import block_diag
 
-tau = 0.1  # sampling time for discretization
+tau = 0.5  # sampling time for discretization
 k1 = 10  # spring constant when one-sided spring active
-k2 = 5  # spring constant when one-sided spring not active
-damp = 3  # damping constant
-mass = 2  # mass
+k2 = 1  # spring constant when one-sided spring not active
+damp = 4  # damping constant
+mass = 10  # mass
 l = 0  # displacement for masses to encounter 1-sided spring
 
 A_spring_1 = np.array([[1, tau], [-((tau * 2 * k1) / mass), 1 - (tau * damp) / mass]])
