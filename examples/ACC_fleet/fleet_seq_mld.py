@@ -216,7 +216,7 @@ class TrackingSequentialMldCoordinator(MldAgent):
 
             u[i] = self.agents[i].get_control(xl)
         if DISCRETE_GEARS:
-            # stack the continuous conttrol at the front and the discrete at the back
+            # stack the continuous control at the front and the discrete at the back
             return np.vstack(
                 (
                     np.vstack([u[i][:nu_l, :] for i in range(n)]),

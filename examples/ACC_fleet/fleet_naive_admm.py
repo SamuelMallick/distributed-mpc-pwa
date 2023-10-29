@@ -15,6 +15,8 @@ from plot_fleet import plot_fleet
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
+import matplotlib.pyplot as plt
+
 np.random.seed(3)
 
 n = 2  # num cars
@@ -58,7 +60,7 @@ leader_state = acc.get_leader_state()
 
 large_num = 100000  # large number for dumby bounds on vars
 rho = 0.5  # admm penalty
-admm_iters = 10  # fixed number of iterations for ADMM routine
+admm_iters = 50  # fixed number of iterations for ADMM routine
 
 
 class LocalMpcADMM(MpcMld):
@@ -79,7 +81,7 @@ class LocalMpcADMM(MpcMld):
             (nx_l, N + 1), lb=-large_num, ub=large_num, name="x_front"
         )
         self.x_back = self.mpc_model.addMVar(
-            (nx_l, N + 1), lb=-large_num, ub=-large_num, name="x_back"
+            (nx_l, N + 1), lb=-large_num, ub=large_num, name="x_back"
         )
 
         self.s_front = self.mpc_model.addMVar(
@@ -244,6 +246,7 @@ class ADMMCoordinator(MldAgent):
 
     def get_control(self, state):
         u = [None] * self.n
+        u_plot = []
 
         # initial guess for coupling vars in admm comes from previous solutions #TODO timeshift with constant vel
         for i in range(self.n):
@@ -263,6 +266,7 @@ class ADMMCoordinator(MldAgent):
             for i in range(self.n):
                 xl = state[nx_l * i : nx_l * (i + 1), :]  # pull out local part of state
                 u[i] = self.agents[i].get_control(xl)
+            u_plot.append(u[0][0, 0])
 
             # admm z-update and y-update together
             for i in range(self.n):
@@ -310,7 +314,8 @@ class ADMMCoordinator(MldAgent):
                     self.agents[i].mpc.set_back_vars(
                         self.y_back_list[i], self.z_list[i + 1]
                     )
-
+        #plt.plot(u_plot)
+        #plt.show()
         return np.vstack(u)
 
     # here we set the leader cost because it is independent of other vehicles' states
