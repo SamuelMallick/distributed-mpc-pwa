@@ -24,6 +24,7 @@ class MldAgent(Agent):
         self.u_pred = None  # stores most recent predicted control after being solved
         self.cost_pred = None  # stores most recent predicted cost after being solved
         self.run_time = None  # stores most recent solve time of mpc
+        self.node_count = None  # stores the node count from last MPC solution
 
     def evaluate(
         self,
@@ -91,6 +92,7 @@ class MldAgent(Agent):
         self.u_pred = info["u"]
         self.cost_pred = info["cost"]
         self.run_time = info["run_time"]
+        self.node_count = info["nodes"]
         return u
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
