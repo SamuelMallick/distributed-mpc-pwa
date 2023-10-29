@@ -7,15 +7,12 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
-
-import matplotlib.pyplot as plt
 
 np.random.seed(3)
 
@@ -314,8 +311,8 @@ class ADMMCoordinator(MldAgent):
                     self.agents[i].mpc.set_back_vars(
                         self.y_back_list[i], self.z_list[i + 1]
                     )
-        #plt.plot(u_plot)
-        #plt.show()
+        # plt.plot(u_plot)
+        # plt.show()
         return np.vstack(u)
 
     # here we set the leader cost because it is independent of other vehicles' states
@@ -328,6 +325,7 @@ class ADMMCoordinator(MldAgent):
         x_goal = leader_state[:, 0 : N + 1]
         self.agents[0].mpc.set_x_front(x_goal)
         return super().on_episode_start(env, episode)
+
 
 # env
 env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
