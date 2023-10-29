@@ -19,13 +19,7 @@ class ACC:
 
     mass = 800  # mass
     m_inhom = [
-        800,
-        1900,
-        900,
-        1400,
-        1500,
-        1950,
-        2670,
+        np.random.uniform(725, 1043) for i in range(20)
     ]  # mass value for inhomogenous platoon
     c_fric = 0.5  # viscous friction coefficient
     mu = 0.01  # coulomb friction coefficient
@@ -198,10 +192,10 @@ class ACC:
         }
 
     def leader_state_1(self, ep_len, N):
-        # generate trajectory of leader
+        """Leader trajectory with constant velocity"""
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
-        leader_initial_pos = 600
+        leader_initial_pos = 1000
         leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
         for k in range(ep_len + N):
             leader_state[:, [k + 1]] = leader_state[:, [k]] + self.ts * np.array(
@@ -210,6 +204,7 @@ class ACC:
         return leader_state
 
     def leader_state_2(self, ep_len, N):
+        """Leader trajectory with speed up and slow down to same initial speed."""
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
         leader_initial_pos = 600
@@ -218,7 +213,7 @@ class ACC:
             leader_state[:, [k + 1]] = np.array(
                 [[leader_state[0, k]], [leader_speed]]
             ) + self.ts * np.array([[leader_speed], [0]])
-        leader_speed = 30
+        leader_speed = 40
         for k in range(int(ep_len / 4), int(1 * ep_len / 2)):
             leader_state[:, [k + 1]] = np.array(
                 [[leader_state[0, k]], [leader_speed]]
@@ -231,6 +226,7 @@ class ACC:
         return leader_state
 
     def leader_state_3(self, ep_len, N):
+        """Leader trajectory with speed up, then slow down to slower than initial, then speed back up to initial speed."""
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
         leader_initial_pos = 600
@@ -256,8 +252,15 @@ class ACC:
             ) + self.ts * np.array([[leader_speed], [0]])
         return leader_state
 
-    def __init__(self, ep_len, N):
-        self.leader_state = self.leader_state_3(ep_len, N)
+    def __init__(self, ep_len, N, leader_traj=1):
+        if leader_traj == 1:
+            self.leader_state = self.leader_state_1(ep_len, N)
+        elif leader_traj == 2:
+            self.leader_state = self.leader_state_2(ep_len, N)
+        elif leader_traj == 3:
+            self.leader_state = self.leader_state_3(ep_len, N)
+        else:
+            raise RuntimeError(f"No leader traj asosciated with integer {leader_traj}")
 
     def get_pwa_gear_from_speed(self, v):
         """Get the gear j from the speed v, by the PWA model."""
@@ -288,9 +291,11 @@ class ACC:
             return self.build_full_pwa_system(self.mass)
         return self.build_full_pwa_system(self.m_inhom[index])
 
-    def get_friction_pwa_system(self):
+    def get_friction_pwa_system(self, index=None):
         """Get the friction pwa system dictionary."""
-        return self.build_friction_pwa_system(self.mass)
+        if index is None:
+            return self.build_friction_pwa_system(self.mass)
+        return self.build_friction_pwa_system(self.m_inhom[index])
 
     # the true non-linear dynamics of the car
     def step_car_dynamics_nl(self, x, u, j, n, ts, homog=True):
