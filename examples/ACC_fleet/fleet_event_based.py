@@ -1,4 +1,7 @@
 import sys
+import datetime
+import pickle
+from typing import List
 
 import gurobipy as gp
 import numpy as np
@@ -17,10 +20,15 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(3)
 
-n = 4  # num cars
-N = 7  # controller horizon
-COST_2_NORM = True
+PLOT = True
+SAVE = True
+
+n = 3  # num cars
+N = 10  # controller horizon
+COST_2_NORM = False
 DISCRETE_GEARS = False
+HOMOGENOUS = True
+LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -30,16 +38,23 @@ if len(sys.argv) > 3:
     COST_2_NORM = bool(int(sys.argv[3]))
 if len(sys.argv) > 4:
     DISCRETE_GEARS = bool(int(sys.argv[4]))
+if len(sys.argv) > 5:
+    HOMOGENOUS = bool(int(sys.argv[5]))
+if len(sys.argv) > 6:
+    LEADER_TRAJ = int(sys.argv[6])
+
+random_ICs = False
+if LEADER_TRAJ == 1:
+    random_ICs = True
 
 threshold = 1  # cost improvement must be more than this to consider communication
 
 w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
 
-acc = ACC(ep_len, N)
+acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
@@ -52,7 +67,7 @@ class LocalMpc(MpcMldCentDecup):
     is organised with x = [x_front, x_me, x_back]."""
 
     def __init__(
-        self, systems: list[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
+        self, systems: List[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
         super().__init__(systems, n, N)
         self.setup_cost_and_constraints(self.u, pos_in_fleet, num_vehicles)
@@ -321,6 +336,12 @@ class TrackingEventBasedCoordinator(MldAgent):
         self.control_guesses = [np.zeros((nu_l, N)) for i in range(n)]
         self.gear_guesses = [np.zeros((nu_l, N)) for i in range(n)]
 
+        self.solve_times = np.zeros((ep_len, 1))
+        self.node_counts = np.zeros((ep_len, 1))
+        # temp value used to sum up the itermediate solves over iterations
+        self.temp_solve_time = 0
+        self.temp_node_count = 0
+
     def get_control(self, state):
         [None] * self.n
 
@@ -377,6 +398,10 @@ class TrackingEventBasedCoordinator(MldAgent):
                 ):
                     best_cost_dec = temp_costs[i] - new_cost
                     best_idx = i
+
+            # get solve times and node count
+            self.temp_solve_time += max([self.agents[i].run_time for i in range(self.n)])
+            self.temp_node_count = max([self.agents[i].node_count for i in range(self.n)])
 
             # update state and control guesses based on the winner
             if best_idx >= 0:
@@ -444,6 +469,12 @@ class TrackingEventBasedCoordinator(MldAgent):
                     (self.gear_guesses[i][:, 1:], self.gear_guesses[i][:, -1:]),
                     axis=1,
                 )
+
+        self.solve_times[env.step_counter - 1, :] = self.temp_solve_time
+        self.node_counts[env.step_counter - 1, :] = self.temp_node_count
+        self.temp_solve_time = 0
+        self.temp_node_count = 0
+
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -478,23 +509,44 @@ class TrackingEventBasedCoordinator(MldAgent):
 
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
+env = MonitorEpisodes(
+    TimeLimit(
+        CarFleet(
+            acc,
+            n,
+            ep_len,
+            L2_norm_cost=COST_2_NORM,
+            homogenous=HOMOGENOUS,
+            random_ICs=random_ICs,
+        ),
+        max_episode_steps=ep_len,
+    )
+)
+
 
 if DISCRETE_GEARS:
     mpc_class = LocalMpcGear
-    systems = [friction_system for i in range(n)]
+    if HOMOGENOUS:  # by not passing the index all systems are the same
+        systems = [acc.get_friction_pwa_system() for i in range(n)]
+    else:
+        systems = [acc.get_friction_pwa_system(i) for i in range(n)]
 else:
     mpc_class = LocalMpc
-    systems = [acc.get_pwa_system(i) for i in range(n)]
+    if HOMOGENOUS:  # by not passing the index all systems are the same
+        systems = [acc.get_pwa_system() for i in range(n)]
+    else:
+        systems = [acc.get_pwa_system(i) for i in range(n)]
 
 # coordinator
 local_mpcs: list[LocalMpc] = []
 for i in range(n):
-    # passing local system
-    if i == 0 or i == n - 1:
-        local_mpcs.append(mpc_class(systems, 2, N, i + 1, n))
+    # create mpcs
+    if i == 0:
+        local_mpcs.append(mpc_class([systems[0], systems[1]], 2, N, i + 1, n))
+    elif i == n - 1:
+        local_mpcs.append(mpc_class([systems[n-2], systems[n-1]], 2, N, i + 1, n))
     else:
-        local_mpcs.append(mpc_class(systems, 3, N, i + 1, n))
+        local_mpcs.append(mpc_class([systems[i-1], systems[i], systems[i+1]], 3, N, i + 1, n))
 
 agent = TrackingEventBasedCoordinator(local_mpcs)
 
@@ -511,5 +563,23 @@ else:
 
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
+print(f"Run_times_sum: {sum(agent.solve_times)}")
 
-plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+if PLOT:
+    plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+
+if SAVE:
+    with open(
+        f"event_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
+        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        + ".pkl",
+        "wb",
+    ) as file:
+        pickle.dump(X, file)
+        pickle.dump(U, file)
+        pickle.dump(R, file)
+        pickle.dump(agent.solve_times, file)
+        pickle.dump(agent.node_counts, file)
+        pickle.dump(env.unwrapped.viol_counter[0], file)
+        pickle.dump(leader_state, file)
+
