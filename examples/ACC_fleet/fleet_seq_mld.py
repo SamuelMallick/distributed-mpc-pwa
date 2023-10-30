@@ -1,3 +1,5 @@
+import datetime
+import pickle
 import sys
 
 import gurobipy as gp
@@ -17,10 +19,15 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(3)
 
+PLOT = True
+SAVE = True
+
 n = 3  # num cars
-N = 7  # controller horizon
-COST_2_NORM = True
+N = 10  # controller horizon
+COST_2_NORM = False
 DISCRETE_GEARS = False
+HOMOGENOUS = True
+LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -30,9 +37,17 @@ if len(sys.argv) > 3:
     COST_2_NORM = bool(int(sys.argv[3]))
 if len(sys.argv) > 4:
     DISCRETE_GEARS = bool(int(sys.argv[4]))
+if len(sys.argv) > 5:
+    HOMOGENOUS = bool(int(sys.argv[5]))
+if len(sys.argv) > 6:
+    LEADER_TRAJ = int(sys.argv[6])
+
+random_ICs = False
+if LEADER_TRAJ == 1:
+    random_ICs = True
 
 w = 1e4  # slack variable penalty
-ep_len = 200  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -47,10 +62,9 @@ else:
     Adj = np.zeros((1, 1))
 G_map = g_map(Adj)
 
-acc = ACC(ep_len, N)
+acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
-friction_system = acc.get_friction_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
@@ -191,6 +205,9 @@ class TrackingSequentialMldCoordinator(MldAgent):
         for i in range(self.n):
             self.agents.append(MldAgent(local_mpcs[i]))
 
+        self.solve_times = np.zeros((ep_len, 1))
+        self.node_counts = np.zeros((ep_len, 1))
+
     def get_control(self, state):
         u = [None] * self.n
         for i in range(self.n):
@@ -230,6 +247,14 @@ class TrackingSequentialMldCoordinator(MldAgent):
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         x_goal = leader_state[:, timestep : timestep + N + 1]
         self.agents[0].mpc.set_x_front(x_goal)
+
+        # take the sum of solve times as mpc's are solved in series.
+        # take max for node-count as worst case local memory
+        agent_solve_times = [self.agents[i].run_time for i in range(n)]
+        agent_node_counts = [self.agents[i].node_count for i in range(n)]
+        self.solve_times[env.step_counter - 1, :] = sum(agent_solve_times)
+        self.node_counts[env.step_counter - 1, :] = max(agent_node_counts)
+
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -239,14 +264,32 @@ class TrackingSequentialMldCoordinator(MldAgent):
 
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
+env = MonitorEpisodes(
+    TimeLimit(
+        CarFleet(
+            acc,
+            n,
+            ep_len,
+            L2_norm_cost=COST_2_NORM,
+            homogenous=HOMOGENOUS,
+            random_ICs=random_ICs,
+        ),
+        max_episode_steps=ep_len,
+    )
+)
 
 if DISCRETE_GEARS:
     mpc_class = LocalMpcGear
-    systems = [friction_system for i in range(n)]
+    if HOMOGENOUS:  # by not passing the index all systems are the same
+        systems = [acc.get_friction_pwa_system() for i in range(n)]
+    else:
+        systems = [acc.get_friction_pwa_system(i) for i in range(n)]
 else:
     mpc_class = LocalMpcMld
-    systems = [acc.get_pwa_system(i) for i in range(n)]
+    if HOMOGENOUS:  # by not passing the index all systems are the same
+        systems = [acc.get_pwa_system() for i in range(n)]
+    else:
+        systems = [acc.get_pwa_system(i) for i in range(n)]
 # coordinator
 local_mpcs: list[MpcMld] = []
 for i in range(n):
@@ -272,5 +315,22 @@ else:
 
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
+print(f"Run_times_sum: {sum(agent.solve_times)}")
 
-plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+if PLOT:
+    plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
+
+if SAVE:
+    with open(
+        f"seq_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
+        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        + ".pkl",
+        "wb",
+    ) as file:
+        pickle.dump(X, file)
+        pickle.dump(U, file)
+        pickle.dump(R, file)
+        pickle.dump(agent.solve_times, file)
+        pickle.dump(agent.node_counts, file)
+        pickle.dump(env.unwrapped.viol_counter[0], file)
+        pickle.dump(leader_state, file)
