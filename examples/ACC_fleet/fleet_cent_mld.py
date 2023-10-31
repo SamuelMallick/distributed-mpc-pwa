@@ -2,14 +2,14 @@ import datetime
 import pickle
 import sys
 
-import gurobipy as gp
 import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpc_gear import MpcGear
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcs.cent_mld import MPCMldCent
+from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 from scipy.linalg import block_diag
 
@@ -20,7 +20,7 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 np.random.seed(1)
 
 PLOT = True
-SAVE = True
+SAVE = False
 
 n = 3  # num cars
 N = 10  # controller horizon
@@ -59,83 +59,6 @@ d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
 
 
-class MPCMldCent(MpcMldCentDecup):
-    def __init__(self, systems: list[dict], n, N: int) -> None:
-        super().__init__(systems, n, N)
-        self.setup_cost_and_constraints(self.u)
-
-    def setup_cost_and_constraints(self, u):
-        """Sets up the cost and constraints. Penalises the u passed in."""
-        if COST_2_NORM:
-            cost_func = self.min_2_norm
-        else:
-            cost_func = self.min_1_norm
-
-        # slack vars for soft constraints
-        self.s = self.mpc_model.addMVar((n, N + 1), lb=0, ub=float("inf"), name="s")
-
-        # formulate cost
-        # leader_traj gets changed and fixed by setting its bounds
-        self.leader_traj = self.mpc_model.addMVar(
-            (nx_l, N + 1), lb=0, ub=0, name="leader_traj"
-        )
-        obj = 0
-        for i in range(n):
-            local_state = self.x[nx_l * i : nx_l * (i + 1), :]
-            local_control = u[nu_l * i : nu_l * (i + 1), :]
-            if i == 0:
-                # first car follows traj with no sep
-                follow_state = self.leader_traj
-                temp_sep = np.zeros((2, 1))
-            else:
-                # otherwise follow car infront (i-1)
-                follow_state = self.x[nx_l * (i - 1) : nx_l * (i), :]
-                temp_sep = sep
-            for k in range(N):
-                obj += cost_func(
-                    local_state[:, [k]] - follow_state[:, [k]] - temp_sep, Q_x_l
-                )
-                obj += cost_func(local_control[:, [k]], Q_u_l) + w * self.s[i, [k]]
-            obj += (
-                cost_func(local_state[:, [N]] - follow_state[:, [N]] - temp_sep, Q_x_l)
-                + w * self.s[i, [N]]
-            )
-        self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
-
-        # add extra constraints
-        # acceleration constraints
-        for i in range(n):
-            for k in range(N):
-                self.mpc_model.addConstr(
-                    acc.a_dec * acc.ts
-                    <= self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]],
-                    name=f"dec_car_{i}_step{k}",
-                )
-                self.mpc_model.addConstr(
-                    self.x[nx_l * i + 1, [k + 1]] - self.x[nx_l * i + 1, [k]]
-                    <= acc.a_acc * acc.ts,
-                    name=f"acc_car_{i}_step{k}",
-                )
-
-        # safe distance behind follower vehicle
-
-        for i in range(n):
-            local_state = self.x[nx_l * i : nx_l * (i + 1), :]
-            if i != 0:  # leader isn't following another car
-                follow_state = self.x[nx_l * (i - 1) : nx_l * (i), :]
-                for k in range(N + 1):
-                    self.mpc_model.addConstr(
-                        local_state[0, [k]]
-                        <= follow_state[0, [k]] - d_safe + self.s[i, [k]],
-                        name=f"safe_dis_car_{i}_step{k}",
-                    )
-
-    def set_leader_traj(self, leader_traj):
-        for k in range(N + 1):
-            self.leader_traj[:, [k]].ub = leader_traj[:, [k]]
-            self.leader_traj[:, [k]].lb = leader_traj[:, [k]]
-
-
 class MpcGearCent(MPCMldCent, MpcMldCentDecup, MpcGear):
     def __init__(self, systems: list[dict], n: int, N: int) -> None:
         MpcMldCentDecup.__init__(self, systems, n, N)  # use the MpcMld constructor
@@ -144,7 +67,7 @@ class MpcGearCent(MPCMldCent, MpcMldCentDecup, MpcGear):
         )  # here we are assuming that the F and G are the same for all systems
         G = np.vstack([systems[0]["G"]] * n)
         self.setup_gears(N, acc, F, G)
-        self.setup_cost_and_constraints(self.u_g)
+        self.setup_cost_and_constraints(self.u_g, acc, COST_2_NORM)
 
 
 class TrackingMldAgent(MldAgent):
@@ -194,7 +117,7 @@ else:
         systems = [acc.get_pwa_system() for i in range(n)]
     else:
         systems = [acc.get_pwa_system(i) for i in range(n)]
-    mld_mpc = MPCMldCent(systems, n, N)
+    mld_mpc = MPCMldCent(systems, acc, COST_2_NORM, n, N)
     # initialise the cost with the first tracking point
     mld_mpc.set_leader_traj(leader_state[:, 0 : N + 1])
     agent = TrackingMldAgent(mld_mpc)
