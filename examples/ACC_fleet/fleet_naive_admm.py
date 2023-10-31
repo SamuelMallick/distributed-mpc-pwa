@@ -1,36 +1,37 @@
-import sys
 import datetime
 import pickle
+import sys
+
 import gurobipy as gp
+import matplotlib.pyplot as plt
 import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
 from dmpcrl.core.admm import g_map
+from mpcs.cent_mld import MPCMldCent
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
-from mpc_gear import MpcGear
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
-
-import matplotlib.pyplot as plt
 
 np.random.seed(3)
 
 PLOT = True
 SAVE = False
 
-DEBUG_PLOT = True   # when true, the admm iterations are plotted at each time step
+DEBUG_PLOT = True  # when true, the admm iterations are plotted at each time step
 
 n = 3  # num cars
 N = 6  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -49,7 +50,6 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
@@ -72,6 +72,7 @@ Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
+w = acc.w  # slack variable penalty
 leader_state = acc.get_leader_state()
 
 large_num = 100000  # large number for dumby bounds on vars
@@ -234,6 +235,7 @@ class LocalMpcADMM(MpcMld):
             self.x_front[:, [k]].lb = x_front[:, [k]]
             self.x_front[:, [k]].ub = x_front[:, [k]]
 
+
 class LocalMpcGear(LocalMpcADMM, MpcGear):
     def __init__(
         self, system: dict, N: int, leader: bool = False, trailer: bool = False
@@ -241,6 +243,7 @@ class LocalMpcGear(LocalMpcADMM, MpcGear):
         MpcGear.__init__(self, system, N)
         self.setup_gears(N, acc, system["F"], system["G"])
         self.setup_cost_and_constraints(self.u_g, leader, trailer)
+
 
 class ADMMCoordinator(MldAgent):
     def __init__(
@@ -273,13 +276,27 @@ class ADMMCoordinator(MldAgent):
         self.temp_solve_time = 0
         self.temp_node_count = 0
 
+        # a centralized mpc to generate global optimums, to analyse admm convergence
+        if DEBUG_PLOT:
+            if DISCRETE_GEARS:
+                raise RuntimeError(
+                    "Admm debug with centralized mpc not implemented for discrete gear model."
+                )
+            if HOMOGENOUS:  # by not passing the index all systems are the same
+                systems = [acc.get_pwa_system() for i in range(n)]
+            else:
+                systems = [acc.get_pwa_system(i) for i in range(n)]
+            self.cent_mpc = MPCMldCent(systems, acc, COST_2_NORM, n, N)
+
     def get_control(self, state):
         u = [None] * self.n
         if DEBUG_PLOT:
             admm_dict = {
-                "u": [[] for i in range(n)], 
+                "u": [[] for i in range(n)],
                 "x": [[] for i in range(n)],
-                "z": [[] for i in range(n)]
+                "x_front" : [[] for i in range(n)],
+                "x_back" : [[] for i in range(n)],
+                "z": [[] for i in range(n)],
             }
 
         # initial guess for coupling vars in admm comes from previous solutions #TODO timeshift with constant vel
@@ -303,6 +320,10 @@ class ADMMCoordinator(MldAgent):
                 if DEBUG_PLOT:
                     admm_dict["u"][i].append(self.agents[i].mpc.u.X)
                     admm_dict["x"][i].append(self.agents[i].mpc.x.X)
+                    if i != 0:
+                        admm_dict["x_front"][i].append(self.agents[i].mpc.x_front.X)
+                    if i != n-1:
+                        admm_dict["x_back"][i].append(self.agents[i].mpc.x_back.X)
 
             # admm z-update and y-update together
             for i in range(self.n):
@@ -332,7 +353,7 @@ class ADMMCoordinator(MldAgent):
                     self.y_back_list[i - 1] += rho * (
                         self.agents[i - 1].mpc.x_back.X - self.z_list[i]
                     )
-                
+
                 if DEBUG_PLOT:
                     admm_dict["z"][i].append(self.z_list[i])
 
@@ -355,17 +376,36 @@ class ADMMCoordinator(MldAgent):
                     )
 
             # get solve times and node count
-            self.temp_solve_time += max([self.agents[i].run_time for i in range(self.n)])
-            self.temp_node_count = max([self.agents[i].node_count for i in range(self.n)])
+            self.temp_solve_time += max(
+                [self.agents[i].run_time for i in range(self.n)]
+            )
+            self.temp_node_count = max(
+                [self.agents[i].node_count for i in range(self.n)]
+            )
 
         if DEBUG_PLOT:
-            time_step = 0   # plot control/state iterations predicted at this time_step
-            agent = 1       # plot for which agent
-            #plt.plot([admm_dict["u"][agent][i][:, time_step] for i in range(admm_iters)])
+            #centralized solution
+            self.cent_mpc.solve_mpc(state)
+            time_step = 0  # plot control/state iterations predicted at this time_step
+            agent = 2  # plot for which agent
+            # plt.plot([admm_dict["u"][agent][i][:, time_step] for i in range(admm_iters)])
             for time_step in range(N):
-                plt.plot([admm_dict["u"][agent][i][:, time_step] for i in range(admm_iters)])
-                #plt.plot([admm_dict["x"][agent][i][:, time_step] - admm_dict["z"][agent][i][:, time_step] for i in range(admm_iters)])
-            plt.show()
+                plt.plot(
+                    [admm_dict["u"][agent][i][:, time_step] for i in range(admm_iters)]
+                )
+                plt.axhline(self.cent_mpc.u.X[agent, time_step], linestyle="--")
+                plt.show()
+
+                plt.plot([admm_dict["x"][agent][i][0, time_step] - admm_dict["z"][agent][i][0, time_step] for i in range(admm_iters)])
+                plt.show()
+
+                plt.plot([admm_dict["x"][agent][i][0, time_step] for i in range(admm_iters)])
+                if agent != 0:
+                    plt.plot([admm_dict["x_back"][agent-1][i][0, time_step] for i in range(admm_iters)])
+                if agent != n-1:
+                    plt.plot([admm_dict["x_front"][agent+1][i][0, time_step] for i in range(admm_iters)])
+                plt.axhline(self.cent_mpc.x.X[agent*nx_l, time_step], linestyle="--")
+                plt.show()
 
         if DISCRETE_GEARS:
             # stack the continuous conttrol at the front and the discrete at the back
@@ -382,6 +422,10 @@ class ADMMCoordinator(MldAgent):
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         x_goal = leader_state[:, timestep : timestep + N + 1]
         self.agents[0].mpc.set_x_front(x_goal)
+
+        # set the leader trajectory for centralized MPC
+        if DEBUG_PLOT:
+            self.cent_mpc.set_leader_traj(x_goal)
 
         self.solve_times[env.step_counter - 1, :] = self.temp_solve_time
         self.node_counts[env.step_counter - 1, :] = self.temp_node_count
@@ -456,7 +500,7 @@ if PLOT:
 if SAVE:
     with open(
         f"admm_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
-        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
     ) as file:
