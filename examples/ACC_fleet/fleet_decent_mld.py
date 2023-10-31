@@ -1,4 +1,3 @@
-import datetime
 import pickle
 import sys
 
@@ -9,9 +8,9 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
@@ -22,7 +21,7 @@ np.random.seed(3)
 PLOT = True
 SAVE = True
 
-n = 3  # num cars
+n = 4  # num cars
 N = 10  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
@@ -46,7 +45,7 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-w = 1e4  # slack variable penalty
+
 ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
@@ -69,6 +68,7 @@ Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
+w = acc.w  # slack variable penalty
 leader_state = acc.get_leader_state()
 
 large_num = 10000  # large number for dumby bounds on vars
@@ -220,7 +220,7 @@ class TrackingDecentMldCoordinator(MldAgent):
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
         self.observe_states(env, timestep)
 
-        # take the maximum solve time and maximum node count, as all agents are assumed to 
+        # take the maximum solve time and maximum node count, as all agents are assumed to
         # have operated in parallel
         agent_solve_times = [self.agents[i].run_time for i in range(n)]
         agent_node_counts = [self.agents[i].node_count for i in range(n)]
@@ -329,7 +329,7 @@ if PLOT:
 if SAVE:
     with open(
         f"decent_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
-        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
     ) as file:

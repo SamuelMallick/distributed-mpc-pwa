@@ -14,6 +14,7 @@ class ACC:
     # local costs
     Q_x_l = np.diag([1, 0.1])
     Q_u_l = 0.1 * np.eye(nu_l)
+    w = 1e4  # penalty on slack violations
 
     sep = np.array([[-50], [0]])  # desired seperation between vehicles states
 
@@ -213,7 +214,7 @@ class ACC:
             leader_state[:, [k + 1]] = np.array(
                 [[leader_state[0, k]], [leader_speed]]
             ) + self.ts * np.array([[leader_speed], [0]])
-        leader_speed = 40
+        leader_speed = 30
         for k in range(int(ep_len / 4), int(1 * ep_len / 2)):
             leader_state[:, [k + 1]] = np.array(
                 [[leader_state[0, k]], [leader_speed]]

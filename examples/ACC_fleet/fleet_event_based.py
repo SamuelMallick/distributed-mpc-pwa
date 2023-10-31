@@ -1,7 +1,6 @@
-import sys
 import datetime
 import pickle
-from typing import List
+import sys
 
 import gurobipy as gp
 import numpy as np
@@ -9,9 +8,9 @@ from ACC_env import CarFleet
 from ACC_model import ACC
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpc_gear import MpcGear
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 from scipy.linalg import block_diag
 
@@ -49,7 +48,6 @@ if LEADER_TRAJ == 1:
 
 threshold = 1  # cost improvement must be more than this to consider communication
 
-w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
 
 acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
@@ -59,6 +57,7 @@ Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
 sep = acc.sep
 d_safe = acc.d_safe
+w = acc.w  # slack variable penalty
 leader_state = acc.get_leader_state()
 
 
@@ -67,7 +66,7 @@ class LocalMpc(MpcMldCentDecup):
     is organised with x = [x_front, x_me, x_back]."""
 
     def __init__(
-        self, systems: List[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
+        self, systems: list[dict], n: int, N: int, pos_in_fleet: int, num_vehicles: int
     ) -> None:
         super().__init__(systems, n, N)
         self.setup_cost_and_constraints(self.u, pos_in_fleet, num_vehicles)
@@ -400,8 +399,12 @@ class TrackingEventBasedCoordinator(MldAgent):
                     best_idx = i
 
             # get solve times and node count
-            self.temp_solve_time += max([self.agents[i].run_time for i in range(self.n)])
-            self.temp_node_count = max([self.agents[i].node_count for i in range(self.n)])
+            self.temp_solve_time += max(
+                [self.agents[i].run_time for i in range(self.n)]
+            )
+            self.temp_node_count = max(
+                [self.agents[i].node_count for i in range(self.n)]
+            )
 
             # update state and control guesses based on the winner
             if best_idx >= 0:
@@ -544,9 +547,11 @@ for i in range(n):
     if i == 0:
         local_mpcs.append(mpc_class([systems[0], systems[1]], 2, N, i + 1, n))
     elif i == n - 1:
-        local_mpcs.append(mpc_class([systems[n-2], systems[n-1]], 2, N, i + 1, n))
+        local_mpcs.append(mpc_class([systems[n - 2], systems[n - 1]], 2, N, i + 1, n))
     else:
-        local_mpcs.append(mpc_class([systems[i-1], systems[i], systems[i+1]], 3, N, i + 1, n))
+        local_mpcs.append(
+            mpc_class([systems[i - 1], systems[i], systems[i + 1]], 3, N, i + 1, n)
+        )
 
 agent = TrackingEventBasedCoordinator(local_mpcs)
 
@@ -571,7 +576,7 @@ if PLOT:
 if SAVE:
     with open(
         f"event_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
-        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
     ) as file:
@@ -582,4 +587,3 @@ if SAVE:
         pickle.dump(agent.node_counts, file)
         pickle.dump(env.unwrapped.viol_counter[0], file)
         pickle.dump(leader_state, file)
-
