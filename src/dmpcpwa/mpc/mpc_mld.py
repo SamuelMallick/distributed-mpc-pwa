@@ -276,7 +276,7 @@ class MpcMld:
             cost = self.mpc_model.objVal
         else:
             u = np.zeros((self.m, self.N))
-            x = np.zeros((self.n, self.N + 1))
+            x = np.zeros(self.x.shape)
             cost = float("inf")
             logger.info("Infeasible")
 

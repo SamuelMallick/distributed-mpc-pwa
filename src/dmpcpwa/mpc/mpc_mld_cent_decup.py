@@ -65,7 +65,7 @@ class MpcMldCentDecup(MpcMld):
         self.mpc_model = mpc_model
         self.x = x
         self.u = u
-        self.n = n * nx_l
+        # self.n = n * nx_l
         self.m = n * nu_l
         self.N = N
 
