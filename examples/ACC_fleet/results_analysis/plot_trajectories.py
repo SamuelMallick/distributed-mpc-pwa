@@ -7,11 +7,15 @@ plt.rc("font", size=14)
 plt.style.use("bmh")
 
 nx_l = 2
-n = 3
-plot_len = 50
-
+plot_len = 100
+name = "seq"
+DG = False
+Q = False
+n = 6
+N = 7
+LT = 2
 with open(
-    f"examples/ACC_fleet/data/cent/cent_n_3_N_10_Q_False_DG_False_HOM_True_LT_1.pkl",
+    f"examples/ACC_fleet/data/{name}/perf_n/{name}_n_{n}_N_{N}_Q_{Q}_DG_{DG}_HOM_True_LT_{LT}.pkl",
     "rb",
 ) as file:
     X = pickle.load(file)
@@ -22,6 +26,9 @@ with open(
     violations = pickle.load(file)
     leader_state = pickle.load(file)
 
+print(f"tracking const: {sum(R)}")
+print(f"av comp time: {sum(solve_times)/len(solve_times)}")
+
 _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
 axs[0].plot(leader_state[0, :plot_len], "--")
 axs[1].plot(leader_state[1, :plot_len], "--")
@@ -30,6 +37,10 @@ for i in range(n):
     axs[1].plot(X[:plot_len, nx_l * i + 1])
 axs[0].set_ylabel(r"pos ($m$)")
 axs[1].set_ylabel(r"vel ($ms^{-1}$)")
+axs[1].set_ylim(0, 40)
 axs[1].set_xlabel(r"time step $k$")
 axs[0].legend(["reference"])
+
+_, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
+axs.plot(U)
 plt.show()
