@@ -1,4 +1,3 @@
-import datetime
 import pickle
 import sys
 
@@ -17,17 +16,17 @@ from scipy.linalg import block_diag
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
-np.random.seed(3)
+np.random.seed(2)
 
-PLOT = True
+PLOT = False
 SAVE = True
 
-n = 3  # num cars
-N = 10  # controller horizon
+n = 5  # num cars
+N = 6  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -47,6 +46,7 @@ if LEADER_TRAJ == 1:
     random_ICs = True
 
 threshold = 1  # cost improvement must be more than this to consider communication
+follow_bias = 1.05  # a slight bias added to the cost to favour following the vehicle in front in case of tiebrake in cost improvements
 
 ep_len = 100  # length of episode (sim len)
 
@@ -55,6 +55,7 @@ nx_l = acc.nx_l
 nu_l = acc.nu_l
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
+Q_du_l = acc.Q_du_l
 sep = acc.sep
 d_safe = acc.d_safe
 w = acc.w  # slack variable penalty
@@ -172,7 +173,7 @@ class LocalMpc(MpcMldCentDecup):
         # front position tracking portions of cost
         if pos_in_fleet > 1:
             for k in range(N + 1):
-                obj += cost_func(
+                obj += follow_bias * cost_func(
                     (
                         self.x[my_index : my_index + 2, [k]]
                         - self.x[f_index : f_index + 2, [k]]
@@ -183,7 +184,7 @@ class LocalMpc(MpcMldCentDecup):
                 +w * self.s_front[:, [k]]
             if pos_in_fleet > 2:
                 for k in range(N + 1):
-                    obj += (
+                    obj += follow_bias * (
                         cost_func(
                             (
                                 self.x[f_index : f_index + 2, [k]]
@@ -196,7 +197,7 @@ class LocalMpc(MpcMldCentDecup):
                     )
         if pos_in_fleet == 1:  # leader
             for k in range(N + 1):
-                obj += cost_func(
+                obj += follow_bias * cost_func(
                     (
                         self.x[my_index : my_index + 2, [k]]
                         - self.ref_traj[:, [k]]
@@ -206,7 +207,7 @@ class LocalMpc(MpcMldCentDecup):
                 )
         if pos_in_fleet == 2:  # follower of leader
             for k in range(N + 1):
-                obj += cost_func(
+                obj += follow_bias * cost_func(
                     (
                         self.x[f_index : f_index + 2, [k]]
                         - self.ref_traj[:, [k]]
@@ -215,7 +216,7 @@ class LocalMpc(MpcMldCentDecup):
                     Q_x_l,
                 )
 
-        # slacks for vehicles behind
+        # back position tracking
         if num_vehicles - pos_in_fleet >= 1:
             for k in range(N + 1):
                 obj += (
@@ -347,7 +348,8 @@ class TrackingEventBasedCoordinator(MldAgent):
         [None] * self.n
 
         temp_costs = [None] * self.n
-        for iter in range(4):
+        for iter in range(5):
+            print(f"iter {iter + 1}")
             best_cost_dec = -float("inf")
             best_idx = -1  # gets set to an agent index if there is a cost improvement
             for i in range(self.n):
