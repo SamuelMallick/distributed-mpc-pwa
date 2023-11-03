@@ -140,5 +140,4 @@ pardiso.lic
 tmp_casadi_compiler*.o
 tmp_casadi_compiler*.so
 
-*.pkl
 *.cmd
