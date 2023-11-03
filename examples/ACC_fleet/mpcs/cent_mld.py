@@ -25,6 +25,7 @@ class MPCMldCent(MpcMldCentDecup):
         nu_l = acc.nu_l
         Q_x_l = acc.Q_x_l
         Q_u_l = acc.Q_u_l
+        Q_du_l = acc.Q_du_l
         sep = acc.sep
         d_safe = acc.d_safe
         w = acc.w
@@ -56,6 +57,12 @@ class MPCMldCent(MpcMldCentDecup):
                     local_state[:, [k]] - follow_state[:, [k]] - temp_sep, Q_x_l
                 )
                 obj += cost_func(local_control[:, [k]], Q_u_l) + w * self.s[i, [k]]
+
+                if k < self.N - 1:
+                    obj += cost_func(
+                        local_control[:, [k + 1]] - local_control[:, [k]], Q_du_l
+                    )
+
             obj += (
                 cost_func(
                     local_state[:, [self.N]] - follow_state[:, [self.N]] - temp_sep,
