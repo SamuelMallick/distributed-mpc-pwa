@@ -1,4 +1,3 @@
-import datetime
 import pickle
 import sys
 
@@ -8,26 +7,26 @@ import numpy as np
 from ACC_env import CarFleet
 from ACC_model import ACC
 from dmpcrl.core.admm import g_map
-from mpcs.cent_mld import MPCMldCent
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcs.cent_mld import MPCMldCent
 from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
 
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
-np.random.seed(3)
+np.random.seed(2)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
-DEBUG_PLOT = True  # when true, the admm iterations are plotted at each time step
+DEBUG_PLOT = False  # when true, the admm iterations are plotted at each time step
 
-n = 3  # num cars
-N = 6  # controller horizon
+n = 5  # num cars
+N = 7  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
 HOMOGENOUS = True
@@ -70,6 +69,7 @@ nx_l = acc.nx_l
 nu_l = acc.nu_l
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
+Q_du_l = acc.Q_du_l
 sep = acc.sep
 d_safe = acc.d_safe
 w = acc.w  # slack variable penalty
@@ -138,6 +138,9 @@ class LocalMpcADMM(MpcMld):
                 + w * self.s_front[:, k]
                 + w * self.s_back[:, k]
             )
+
+            if k < N - 1:
+                obj += cost_func(u[:, [k + 1]] - u[:, [k]], Q_du_l)
 
             # accel cnstrs
             self.mpc_model.addConstr(
@@ -294,8 +297,8 @@ class ADMMCoordinator(MldAgent):
             admm_dict = {
                 "u": [[] for i in range(n)],
                 "x": [[] for i in range(n)],
-                "x_front" : [[] for i in range(n)],
-                "x_back" : [[] for i in range(n)],
+                "x_front": [[] for i in range(n)],
+                "x_back": [[] for i in range(n)],
                 "z": [[] for i in range(n)],
             }
 
@@ -322,7 +325,7 @@ class ADMMCoordinator(MldAgent):
                     admm_dict["x"][i].append(self.agents[i].mpc.x.X)
                     if i != 0:
                         admm_dict["x_front"][i].append(self.agents[i].mpc.x_front.X)
-                    if i != n-1:
+                    if i != n - 1:
                         admm_dict["x_back"][i].append(self.agents[i].mpc.x_back.X)
 
             # admm z-update and y-update together
@@ -380,11 +383,12 @@ class ADMMCoordinator(MldAgent):
                 [self.agents[i].run_time for i in range(self.n)]
             )
             self.temp_node_count = max(
-                [self.agents[i].node_count for i in range(self.n)]
+                max([self.agents[i].node_count for i in range(self.n)]),
+                self.temp_node_count,
             )
 
         if DEBUG_PLOT:
-            #centralized solution
+            # centralized solution
             self.cent_mpc.solve_mpc(state)
             time_step = 0  # plot control/state iterations predicted at this time_step
             agent = 2  # plot for which agent
@@ -396,15 +400,33 @@ class ADMMCoordinator(MldAgent):
                 plt.axhline(self.cent_mpc.u.X[agent, time_step], linestyle="--")
                 plt.show()
 
-                plt.plot([admm_dict["x"][agent][i][0, time_step] - admm_dict["z"][agent][i][0, time_step] for i in range(admm_iters)])
+                plt.plot(
+                    [
+                        admm_dict["x"][agent][i][0, time_step]
+                        - admm_dict["z"][agent][i][0, time_step]
+                        for i in range(admm_iters)
+                    ]
+                )
                 plt.show()
 
-                plt.plot([admm_dict["x"][agent][i][0, time_step] for i in range(admm_iters)])
+                plt.plot(
+                    [admm_dict["x"][agent][i][0, time_step] for i in range(admm_iters)]
+                )
                 if agent != 0:
-                    plt.plot([admm_dict["x_back"][agent-1][i][0, time_step] for i in range(admm_iters)])
-                if agent != n-1:
-                    plt.plot([admm_dict["x_front"][agent+1][i][0, time_step] for i in range(admm_iters)])
-                plt.axhline(self.cent_mpc.x.X[agent*nx_l, time_step], linestyle="--")
+                    plt.plot(
+                        [
+                            admm_dict["x_back"][agent - 1][i][0, time_step]
+                            for i in range(admm_iters)
+                        ]
+                    )
+                if agent != n - 1:
+                    plt.plot(
+                        [
+                            admm_dict["x_front"][agent + 1][i][0, time_step]
+                            for i in range(admm_iters)
+                        ]
+                    )
+                plt.axhline(self.cent_mpc.x.X[agent * nx_l, time_step], linestyle="--")
                 plt.show()
 
         if DISCRETE_GEARS:

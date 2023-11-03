@@ -247,6 +247,8 @@ class LocalMpc(MpcMldCentDecup):
         for i in range(u.shape[0]):
             for k in range(N):
                 obj += cost_func(u[i, [k]].reshape(1, 1), Q_u_l)
+                if k < N - 1:
+                    obj += cost_func(u[i, [k + 1]] - u[i, [k]], Q_du_l)
 
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 

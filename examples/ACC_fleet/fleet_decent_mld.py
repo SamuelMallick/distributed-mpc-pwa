@@ -16,17 +16,17 @@ from plot_fleet import plot_fleet
 from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
-np.random.seed(3)
+np.random.seed(2)
 
-PLOT = True
+PLOT = False
 SAVE = True
 
-n = 4  # num cars
-N = 10  # controller horizon
+n = 5  # num cars
+N = 7  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -66,6 +66,7 @@ nx_l = acc.nx_l
 nu_l = acc.nu_l
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
+Q_du_l = acc.Q_du_l
 sep = acc.sep
 d_safe = acc.d_safe
 w = acc.w  # slack variable penalty
@@ -123,6 +124,8 @@ class LocalMpcMld(MpcMld):
                 + w * self.s_front[:, k]
                 + w * self.s_back[:, k]
             )
+            if k < N - 1:
+                obj += cost_func(u[:, [k + 1]] - u[:, [k]], Q_du_l)
 
             # accel cnstrs
             self.mpc_model.addConstr(

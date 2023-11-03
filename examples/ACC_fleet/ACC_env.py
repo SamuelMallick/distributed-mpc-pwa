@@ -28,6 +28,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self.nu_l = acc.nu_l
         self.Q_x_l = acc.Q_x_l
         self.Q_u_l = acc.Q_u_l
+        self.Q_du_l = acc.Q_du_l
         self.sep = acc.sep
         self.leader_state = acc.get_leader_state()
         self.n = n
@@ -36,6 +37,8 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self.homogenous = homogenous
         self.random_ICs = random_ICs
         self.L2_norm_cost = L2_norm_cost
+
+        self.previous_action = None  # store previous action to penalise variation
 
         super().__init__()
 
@@ -88,38 +91,70 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     ) -> float:
         """Computes the stage cost `L(s,a)`."""
 
+        if (
+            self.previous_action is None
+        ):  # for the first time step the variation penalty will be zero
+            self.previous_action = action
+
         cost = 0
         for i in range(self.n):
             local_state = state[self.nx_l * i : self.nx_l * (i + 1), :]
             local_action = action[self.nu_l * i : self.nu_l * (i + 1), :]
+            local_prev_action = self.previous_action[
+                self.nu_l * i : self.nu_l * (i + 1), :
+            ]
             if i == 0:
                 # first car tracks leader
                 follow_state = self.leader_state[:, [self.step_counter]]
                 if self.L2_norm_cost:
-                    cost += (local_state - follow_state).T @ self.Q_x_l @ (
-                        local_state - follow_state
-                    ) + local_action.T @ self.Q_u_l @ local_action
+                    cost += (
+                        (local_state - follow_state).T
+                        @ self.Q_x_l
+                        @ (local_state - follow_state)
+                        + local_action.T @ self.Q_u_l @ local_action
+                        + (local_action - local_prev_action).T
+                        @ self.Q_du_l
+                        @ (local_action - local_prev_action)
+                    )
                 else:
-                    cost += np.linalg.norm(
-                        self.Q_x_l @ (local_state - follow_state), ord=1
-                    ) + np.linalg.norm(self.Q_u_l @ local_action, ord=1)
+                    cost += (
+                        np.linalg.norm(self.Q_x_l @ (local_state - follow_state), ord=1)
+                        + np.linalg.norm(self.Q_u_l @ local_action, ord=1)
+                        + np.linalg.norm(
+                            self.Q_du_l @ (local_action - local_prev_action), ord=1
+                        )
+                    )
             else:
                 # other cars follow the next car
                 follow_state = state[self.nx_l * (i - 1) : self.nx_l * (i), :]
                 if self.L2_norm_cost:
-                    cost += (local_state - follow_state - self.sep).T @ self.Q_x_l @ (
-                        local_state - follow_state - self.sep
-                    ) + local_action.T @ self.Q_u_l @ local_action
+                    cost += (
+                        (local_state - follow_state - self.sep).T
+                        @ self.Q_x_l
+                        @ (local_state - follow_state - self.sep)
+                        + local_action.T @ self.Q_u_l @ local_action
+                        + (local_action - local_prev_action).T
+                        @ self.Q_du_l
+                        @ (local_action - local_prev_action)
+                    )
                 else:
-                    cost += np.linalg.norm(
-                        self.Q_x_l @ (local_state - follow_state - self.sep), ord=1
-                    ) + np.linalg.norm(self.Q_u_l @ local_action, ord=1)
+                    cost += (
+                        np.linalg.norm(
+                            self.Q_x_l @ (local_state - follow_state - self.sep), ord=1
+                        )
+                        + np.linalg.norm(self.Q_u_l @ local_action, ord=1)
+                        + np.linalg.norm(
+                            self.Q_du_l @ (local_action - local_prev_action), ord=1
+                        )
+                    )
 
             # check for constraint violations
             if i < self.n - 1:
                 local_state_behind = state[self.nx_l * (i + 1) : self.nx_l * (i + 2), :]
                 if local_state[0] - local_state_behind[0] < self.acc.d_safe:
                     self.viol_counter[-1][self.step_counter] = 100
+
+        self.previous_action = action
 
         return cost
 

@@ -1,4 +1,3 @@
-import datetime
 import pickle
 import sys
 
@@ -17,16 +16,16 @@ from dmpcpwa.agents.mld_agent import MldAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
-np.random.seed(1)
+np.random.seed(2)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
-n = 3  # num cars
-N = 10  # controller horizon
+n = 2  # num cars
+N = 7  # controller horizon
 COST_2_NORM = False
 DISCRETE_GEARS = False
-HOMOGENOUS = True
+HOMOGENOUS = False
 LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
@@ -50,17 +49,12 @@ w = 1e4  # slack variable penalty
 ep_len = 100  # length of episode (sim len)
 
 acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
-nx_l = acc.nx_l
-nu_l = acc.nu_l
-Q_x_l = acc.Q_x_l
-Q_u_l = acc.Q_u_l
-sep = acc.sep
-d_safe = acc.d_safe
 leader_state = acc.get_leader_state()
 
 
 class MpcGearCent(MPCMldCent, MpcMldCentDecup, MpcGear):
     def __init__(self, systems: list[dict], n: int, N: int) -> None:
+        self.n = n
         MpcMldCentDecup.__init__(self, systems, n, N)  # use the MpcMld constructor
         F = block_diag(
             *([systems[0]["F"]] * n)
@@ -143,7 +137,7 @@ if PLOT:
 if SAVE:
     with open(
         f"cent_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
-        + datetime.datetime.now().strftime("%d%H%M%S%f")
+        # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
     ) as file:
