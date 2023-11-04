@@ -22,12 +22,13 @@ PLOT = False
 SAVE = True
 
 n = 5  # num cars
-N = 10  # controller horizon
+N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
+num_iters = 5
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
 if len(sys.argv) > 2:
@@ -40,6 +41,8 @@ if len(sys.argv) > 5:
     HOMOGENOUS = bool(int(sys.argv[5]))
 if len(sys.argv) > 6:
     LEADER_TRAJ = int(sys.argv[6])
+if len(sys.argv) > 7:
+    num_iters = int(sys.argv[7])
 
 random_ICs = False
 if LEADER_TRAJ == 1:
@@ -348,7 +351,7 @@ class TrackingEventBasedCoordinator(MldAgent):
         [None] * self.n
 
         temp_costs = [None] * self.n
-        for iter in range(5):
+        for iter in range(num_iters):
             print(f"iter {iter + 1}")
             best_cost_dec = -float("inf")
             best_idx = -1  # gets set to an agent index if there is a cost improvement
@@ -579,7 +582,7 @@ if PLOT:
 
 if SAVE:
     with open(
-        f"event_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
+        f"event{num_iters}_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
         # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
