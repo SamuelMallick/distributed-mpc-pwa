@@ -22,11 +22,11 @@ PLOT = False
 SAVE = True
 
 n = 5  # num cars
-N = 7  # controller horizon
-COST_2_NORM = False
+N = 10  # controller horizon
+COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -45,8 +45,8 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-threshold = 1  # cost improvement must be more than this to consider communication
-follow_bias = 1.05  # a slight bias added to the cost to favour following the vehicle in front in case of tiebrake in cost improvements
+threshold = 0.1  # cost improvement must be more than this to consider communication
+follow_bias = 1  # a slight bias added to the cost to favour following the vehicle in front in case of tiebrake in cost improvements
 
 ep_len = 100  # length of episode (sim len)
 
