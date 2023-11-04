@@ -18,8 +18,8 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(2)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
 n = 5  # num cars
 N = 5  # controller horizon
@@ -582,7 +582,7 @@ if PLOT:
 
 if SAVE:
     with open(
-        f"event_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
+        f"event{num_iters}_n_{n}_N_{N}_Q_{COST_2_NORM}_DG_{DISCRETE_GEARS}_HOM_{HOMOGENOUS}_LT_{LEADER_TRAJ}"
         # + datetime.datetime.now().strftime("%d%H%M%S%f")
         + ".pkl",
         "wb",
