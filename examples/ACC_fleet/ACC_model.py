@@ -197,7 +197,7 @@ class ACC:
         """Leader trajectory with constant velocity"""
         leader_state = np.zeros((2, ep_len + N + 1))
         leader_speed = 20
-        leader_initial_pos = 1000
+        leader_initial_pos = 3000
         leader_state[:, [0]] = np.array([[leader_initial_pos], [leader_speed]])
         for k in range(ep_len + N):
             leader_state[:, [k + 1]] = leader_state[:, [k]] + self.ts * np.array(
@@ -330,8 +330,8 @@ class ACC:
 
                 # TODO handle this better
                 # force velocity to be above 2 where PWA dynamics are valid
-                # if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
-                #    x_temp[self.nx_l * (i) + 1, :] = self.x2_min
+                if x_temp[self.nx_l * (i) + 1, :] < self.x2_min:
+                   x_temp[self.nx_l * (i) + 1, :] = self.x2_min
 
             x = x_temp
 

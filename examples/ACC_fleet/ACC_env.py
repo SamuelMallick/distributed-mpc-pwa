@@ -54,15 +54,16 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         self.x = np.tile(np.array([[0], [0]]), (self.n, 1))
 
         if self.random_ICs:
-            starting_velocities = [
-                30 * np.random.random() + 5 for i in range(self.n)
-            ]  # starting velocities between 5-35 ms-1
+            starting_velocities = [30] + [
+                35 * np.random.random() + 5 for i in range(self.n - 1)
+            ]  # starting velocities between 5-40 ms-1
 
             # starting positions between 0-1000 meters, with some forced spacing
-            front_pos = 1000
+            front_pos = 3000.0
             spread = 100
-            spacing = 50
-            starting_positions = [front_pos - spread * np.random.random()]
+            spacing = 200
+            starting_positions = [front_pos]
+            #starting_positions = [front_pos - spread * np.random.random()]
             for i in range(1, self.n):
                 starting_positions.append(
                     -spread * np.random.random() + starting_positions[-1] - spacing
