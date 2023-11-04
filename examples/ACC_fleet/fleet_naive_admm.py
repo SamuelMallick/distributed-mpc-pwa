@@ -32,6 +32,7 @@ DISCRETE_GEARS = False
 HOMOGENOUS = True
 LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
+admm_iters = 20  # fixed number of iterations for ADMM routine
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
 if len(sys.argv) > 2:
@@ -44,6 +45,8 @@ if len(sys.argv) > 5:
     HOMOGENOUS = bool(int(sys.argv[5]))
 if len(sys.argv) > 6:
     LEADER_TRAJ = int(sys.argv[6])
+if len(sys.argv) > 7:
+    admm_iters = int(sys.argv[7])
 
 random_ICs = False
 if LEADER_TRAJ == 1:
@@ -77,7 +80,7 @@ leader_state = acc.get_leader_state()
 
 large_num = 100000  # large number for dumby bounds on vars
 rho = 0.5  # admm penalty
-admm_iters = 20  # fixed number of iterations for ADMM routine
+
 
 
 class LocalMpcADMM(MpcMld):
