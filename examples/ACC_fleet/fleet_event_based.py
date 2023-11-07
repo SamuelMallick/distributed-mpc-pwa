@@ -409,8 +409,9 @@ class TrackingEventBasedCoordinator(MldAgent):
             self.temp_solve_time += max(
                 [self.agents[i].run_time for i in range(self.n)]
             )
-            self.temp_node_count = max(
-                [self.agents[i].node_count for i in range(self.n)]
+            self.temp_node_count = max(max(
+                [self.agents[i].node_count for i in range(self.n)]),
+                self.temp_node_count
             )
 
             # update state and control guesses based on the winner
@@ -576,6 +577,7 @@ else:
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
 print(f"Run_times_sum: {sum(agent.solve_times)}")
+print(f"Mem: {max(agent.node_counts)}")
 
 if PLOT:
     plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])
