@@ -18,14 +18,14 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 2  # num cars
-N = 7  # controller horizon
-COST_2_NORM = False
-DISCRETE_GEARS = False
-HOMOGENOUS = False
+n = 3  # num cars
+N = 5  # controller horizon
+COST_2_NORM = True
+DISCRETE_GEARS = True
+HOMOGENOUS = True
 LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
@@ -68,6 +68,7 @@ class TrackingMldAgent(MldAgent):
     def __init__(self, mpc: MpcMld) -> None:
         self.solve_times = np.zeros((ep_len, 1))
         self.node_counts = np.zeros((ep_len, 1))
+        self.bin_var_counts = np.zeros((ep_len, 1))
         super().__init__(mpc)
 
     def on_timestep_end(self, env: Env, episode: int, timestep: int) -> None:
@@ -75,6 +76,7 @@ class TrackingMldAgent(MldAgent):
         self.mpc.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
         self.solve_times[env.step_counter - 1, :] = self.run_time
         self.node_counts[env.step_counter - 1, :] = self.node_count
+        self.bin_var_counts[env.step_counter - 1, :] = self.num_bin_vars
         return super().on_timestep_end(env, episode, timestep)
 
     def on_episode_start(self, env: Env, episode: int) -> None:
@@ -130,6 +132,7 @@ else:
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
 print(f"Run_times_sum: {sum(agent.solve_times)}")
+print(f"average_bin_vars: {sum(agent.bin_var_counts)/len(agent.bin_var_counts)}")
 
 if PLOT:
     plot_fleet(n, X, U, R, leader_state, violations=env.unwrapped.viol_counter[0])

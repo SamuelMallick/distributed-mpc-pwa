@@ -290,4 +290,5 @@ class MpcMld:
             "cost": cost,
             "run_time": run_time,
             "nodes": nodes,
+            "bin_vars" : self.mpc_model.presolve().NumBinVars
         }

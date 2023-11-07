@@ -25,6 +25,7 @@ class MldAgent(Agent):
         self.cost_pred = None  # stores most recent predicted cost after being solved
         self.run_time = None  # stores most recent solve time of mpc
         self.node_count = None  # stores the node count from last MPC solution
+        self.num_bin_vars = None    # stors the number of binary variables in the model AFTER the presolve
 
     def evaluate(
         self,
@@ -93,6 +94,7 @@ class MldAgent(Agent):
         self.cost_pred = info["cost"]
         self.run_time = info["run_time"]
         self.node_count = info["nodes"]
+        self.num_bin_vars = info["bin_vars"]
         return u
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
