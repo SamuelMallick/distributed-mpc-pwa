@@ -77,7 +77,7 @@ class ACC:
         T.append(np.array([[self.v_gear_lim[0]], [-self.x2_min]]))
         T.append(np.array([[self.v_gear_lim[1]], [-self.v_gear_lim[0]]]))
         T.append(np.array([[self.v_gear_lim[2]], [-self.v_gear_lim[1]]]))
-        T.append(np.array([[self.alpha], [self.v_gear_lim[2]]]))
+        T.append(np.array([[self.alpha], [-self.v_gear_lim[2]]]))
         T.append(np.array([[self.v_gear_lim[3]], [-self.alpha]]))
         T.append(np.array([[self.v_gear_lim[4]], [-self.v_gear_lim[3]]]))
         T.append(np.array([[self.x2_max], [-self.v_gear_lim[4]]]))

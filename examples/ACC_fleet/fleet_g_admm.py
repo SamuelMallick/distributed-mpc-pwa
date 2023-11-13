@@ -1,5 +1,5 @@
 import logging
-
+import sys
 import casadi as cs
 import numpy as np
 from ACC_env import CarFleet
@@ -14,13 +14,36 @@ from plot_fleet import plot_fleet
 from dmpcpwa.agents.g_admm_coordinator import GAdmmCoordinator
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 
-np.random.seed(1)
+np.random.seed(2)
 
-n = 2  # num cars
+PLOT = True
+SAVE = False
+
+n = 4 # num cars
 N = 5  # controller horizon
-w = 1e4  # slack variable penalty
+COST_2_NORM = True
+DISCRETE_GEARS = False
+HOMOGENOUS = True
+LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
-ep_len = 20  # length of episode (sim len)
+if len(sys.argv) > 1:
+    n = int(sys.argv[1])
+if len(sys.argv) > 2:
+    N = int(sys.argv[2])
+if len(sys.argv) > 3:
+    COST_2_NORM = bool(int(sys.argv[3]))
+if len(sys.argv) > 4:
+    DISCRETE_GEARS = bool(int(sys.argv[4]))
+if len(sys.argv) > 5:
+    HOMOGENOUS = bool(int(sys.argv[5]))
+if len(sys.argv) > 6:
+    LEADER_TRAJ = int(sys.argv[6])
+
+random_ICs = False
+if LEADER_TRAJ == 1:
+    random_ICs = True
+
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -35,14 +58,16 @@ else:
     Adj = np.zeros((1, 1))
 G_map = g_map(Adj)
 
-acc = ACC(ep_len, N)
+acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
 nx_l = acc.nx_l
 nu_l = acc.nu_l
 system = acc.get_pwa_system()
 Q_x_l = acc.Q_x_l
 Q_u_l = acc.Q_u_l
+Q_du_l = acc.Q_du_l
 sep = acc.sep
 d_safe = acc.d_safe
+w = acc.w
 leader_state = acc.get_leader_state()
 
 # no state coupling here so all zeros
@@ -63,7 +88,7 @@ for i in range(n):
 
 
 class LocalMpc(MpcSwitching):
-    rho = 0.5
+    rho = 500#50#0.5
     horizon = N
 
     def __init__(self, num_neighbours, my_index, leader=False) -> None:
@@ -84,7 +109,7 @@ class LocalMpc(MpcSwitching):
         )
 
         s, _, _ = self.variable(
-            "s", (1, N + 1), lb=0
+            "s", (1, N + 1), lb=0,
         )  # slack var for distance constraint
 
         x_c_list = (
@@ -98,6 +123,7 @@ class LocalMpc(MpcSwitching):
 
         # normal constraints
         for k in range(N):
+            pass
             self.constraint(f"state_{k}", system["D"] @ x[:, [k]], "<=", system["E"])
             self.constraint(f"control_{k}", system["F"] @ u[:, [k]], "<=", system["G"])
 
@@ -135,6 +161,7 @@ class LocalMpc(MpcSwitching):
                     + u[:, [k]].T @ Q_u_l @ u[:, [k]]
                     for k in range(N)
                 )
+                + sum((u[:, [k+1]] - u[:, [k]]).T @ Q_du_l @(u[:, [k+1]] - u[:, [k]]) for k in range(N-1))
                 + (x[:, [N]] - self.leader_traj[N]).T
                 @ Q_x_l
                 @ (x[:, [N]] - self.leader_traj[N])
@@ -148,13 +175,14 @@ class LocalMpc(MpcSwitching):
                     @ Q_x_l
                     @ (x[:, [k]] - x_c[0:nx_l, [k]] - sep)
                     + u[:, [k]].T @ Q_u_l @ u[:, [k]]
-                    # + w * s[:, [k]]
+                    + w * s[:, [k]]
                     for k in range(N)
                 )
+                + sum((u[:, [k+1]] - u[:, [k]]).T @ Q_du_l @(u[:, [k+1]] - u[:, [k]]) for k in range(N-1))
                 + (x[:, [N]] - x_c[0:nx_l, [N]] - sep).T
                 @ Q_x_l
                 @ (x[:, [N]] - x_c[0:nx_l, [N]] - sep)
-                # + w * s[:, [N]]
+                + w * s[:, [N]]
             )
 
         # solver
@@ -185,8 +213,12 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
         self.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
         return super().on_timestep_end(env, episode, timestep)
 
+    def on_episode_start(self, env, episode: int) -> None:
+        self.set_leader_traj(leader_state[:, 0 : N + 1])
+        return super().on_episode_start(env, episode)
+
     def set_leader_traj(self, leader_traj):
-        for k in range(N):  # we assume first agent is leader!
+        for k in range(N+1):  # we assume first agent is leader!
             self.agents[0].fixed_parameters[f"x_ref_{k}"] = leader_traj[:, [k]]
 
     def g_admm_control(self, state, warm_start=None):
@@ -195,11 +227,27 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
             acc.get_u_for_constant_vel(env.x[2 * i + 1, :]) * np.ones((nu_l, N))
             for i in range(n)
         ]
+        #warm_start = [
+        #    0.8*np.ones((nu_l, N))
+        #    for i in range(n)
+        #]
         return super().g_admm_control(state, warm_start)
 
 
 # env
-env = MonitorEpisodes(TimeLimit(CarFleet(acc, n, ep_len), max_episode_steps=ep_len))
+env = MonitorEpisodes(
+    TimeLimit(
+        CarFleet(
+            acc,
+            n,
+            ep_len,
+            L2_norm_cost=COST_2_NORM,
+            homogenous=HOMOGENOUS,
+            random_ICs=random_ICs,
+        ),
+        max_episode_steps=ep_len,
+    )
+)
 # distributed mpcs and params
 local_mpcs: list[LocalMpc] = []
 local_fixed_dist_parameters: list[dict] = []
@@ -244,5 +292,6 @@ else:
     R = np.squeeze(env.ep_rewards)
 
 print(f"Return = {sum(R.squeeze())}")
+print(f"Violations = {env.unwrapped.viol_counter}")
 
 plot_fleet(n, X, U, R, leader_state)
