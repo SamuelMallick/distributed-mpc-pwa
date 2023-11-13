@@ -19,12 +19,12 @@ np.random.seed(2)
 PLOT = True
 SAVE = False
 
-n = 4 # num cars
+n = 5 # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -88,7 +88,7 @@ for i in range(n):
 
 
 class LocalMpc(MpcSwitching):
-    rho = 500#50#0.5
+    rho = 0.5
     horizon = N
 
     def __init__(self, num_neighbours, my_index, leader=False) -> None:
@@ -223,14 +223,18 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
 
     def g_admm_control(self, state, warm_start=None):
         # set warm start for fleet: constant velocity
-        warm_start = [
+        warm_start = [[
             acc.get_u_for_constant_vel(env.x[2 * i + 1, :]) * np.ones((nu_l, N))
             for i in range(n)
-        ]
-        #warm_start = [
-        #    0.8*np.ones((nu_l, N))
-        #    for i in range(n)
-        #]
+        ]]
+        warm_start.append([
+            np.ones((nu_l, N))
+            for i in range(n)
+        ])
+        warm_start.append([
+            -np.ones((nu_l, N))
+            for i in range(n)
+        ])
         return super().g_admm_control(state, warm_start)
 
 
