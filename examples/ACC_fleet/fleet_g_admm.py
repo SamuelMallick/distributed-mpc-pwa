@@ -1,5 +1,6 @@
 import logging
 import sys
+
 import casadi as cs
 import numpy as np
 from ACC_env import CarFleet
@@ -19,7 +20,7 @@ np.random.seed(2)
 PLOT = True
 SAVE = False
 
-n = 5 # num cars
+n = 5  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
@@ -109,7 +110,9 @@ class LocalMpc(MpcSwitching):
         )
 
         s, _, _ = self.variable(
-            "s", (1, N + 1), lb=0,
+            "s",
+            (1, N + 1),
+            lb=0,
         )  # slack var for distance constraint
 
         x_c_list = (
@@ -123,7 +126,6 @@ class LocalMpc(MpcSwitching):
 
         # normal constraints
         for k in range(N):
-            pass
             self.constraint(f"state_{k}", system["D"] @ x[:, [k]], "<=", system["E"])
             self.constraint(f"control_{k}", system["F"] @ u[:, [k]], "<=", system["G"])
 
@@ -161,7 +163,10 @@ class LocalMpc(MpcSwitching):
                     + u[:, [k]].T @ Q_u_l @ u[:, [k]]
                     for k in range(N)
                 )
-                + sum((u[:, [k+1]] - u[:, [k]]).T @ Q_du_l @(u[:, [k+1]] - u[:, [k]]) for k in range(N-1))
+                + sum(
+                    (u[:, [k + 1]] - u[:, [k]]).T @ Q_du_l @ (u[:, [k + 1]] - u[:, [k]])
+                    for k in range(N - 1)
+                )
                 + (x[:, [N]] - self.leader_traj[N]).T
                 @ Q_x_l
                 @ (x[:, [N]] - self.leader_traj[N])
@@ -178,7 +183,10 @@ class LocalMpc(MpcSwitching):
                     + w * s[:, [k]]
                     for k in range(N)
                 )
-                + sum((u[:, [k+1]] - u[:, [k]]).T @ Q_du_l @(u[:, [k+1]] - u[:, [k]]) for k in range(N-1))
+                + sum(
+                    (u[:, [k + 1]] - u[:, [k]]).T @ Q_du_l @ (u[:, [k + 1]] - u[:, [k]])
+                    for k in range(N - 1)
+                )
                 + (x[:, [N]] - x_c[0:nx_l, [N]] - sep).T
                 @ Q_x_l
                 @ (x[:, [N]] - x_c[0:nx_l, [N]] - sep)
@@ -208,6 +216,8 @@ class LocalMpc(MpcSwitching):
 
 
 class TrackingGAdmmCoordinator(GAdmmCoordinator):
+    best_warm_starts = []
+
     def on_timestep_end(self, env, episode: int, timestep: int) -> None:
         # time step starts from 1, so this will set the cost accurately for the next time-step
         self.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
@@ -218,24 +228,52 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
         return super().on_episode_start(env, episode)
 
     def set_leader_traj(self, leader_traj):
-        for k in range(N+1):  # we assume first agent is leader!
+        for k in range(N + 1):  # we assume first agent is leader!
             self.agents[0].fixed_parameters[f"x_ref_{k}"] = leader_traj[:, [k]]
 
     def g_admm_control(self, state, warm_start=None):
         # set warm start for fleet: constant velocity
-        warm_start = [[
-            acc.get_u_for_constant_vel(env.x[2 * i + 1, :]) * np.ones((nu_l, N))
-            for i in range(n)
-        ]]
-        warm_start.append([
-            np.ones((nu_l, N))
-            for i in range(n)
-        ])
-        warm_start.append([
-            -np.ones((nu_l, N))
-            for i in range(n)
-        ])
-        return super().g_admm_control(state, warm_start)
+        warm_start = [
+            [
+                acc.get_u_for_constant_vel(env.x[2 * i + 1, :]) * np.ones((nu_l, N))
+                for i in range(n)
+            ]
+        ]
+
+        # also max control as warm start
+        warm_start.append([1 * np.ones((nu_l, N)) for i in range(n)])
+
+        # min control as warm start
+        warm_start.append([-np.ones((nu_l, N)) for i in range(n)])
+
+        # shifted previous solution as warm start
+        if self.prev_sol is not None:
+            warm_start.append(
+                [
+                    np.hstack((self.prev_sol[i][:, 1:], self.prev_sol[i][:, [-1]]))
+                    for i in range(n)
+                ]
+            )
+
+        best_cost = float("inf")
+        best_control = [np.zeros((nu_l, N)) for i in range(n)]
+        counter = 0
+        self.best_warm_starts.append(counter)
+        for u in warm_start:
+            counter += 1
+            u_opt, sol_list, error_flag, infeas_flag = super().g_admm_control(
+                state, warm_start=u
+            )
+            if not error_flag and not infeas_flag:
+                cost = sum(sol_list[i].f for i in range(n))
+            else:
+                cost = float("inf")
+            if cost < best_cost:
+                best_cost = cost
+                best_control = u_opt
+                self.best_warm_starts[-1] = counter
+
+        return cs.DM(best_control), None
 
 
 # env
@@ -297,5 +335,6 @@ else:
 
 print(f"Return = {sum(R.squeeze())}")
 print(f"Violations = {env.unwrapped.viol_counter}")
+print(f"Warm starts: {agent.best_warm_starts}")
 
 plot_fleet(n, X, U, R, leader_state)
