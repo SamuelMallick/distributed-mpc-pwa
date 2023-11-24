@@ -35,7 +35,7 @@ class MpcMld:
         # build mld model
 
         mpc_model = gp.Model("mld_mpc")
-        mpc_model.setParam("OutputFlag", 0)
+        mpc_model.setParam("OutputFlag", 1)
         # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
 
         # Uncomment if you need to differentiate between infeasbile and unbounded
@@ -282,6 +282,10 @@ class MpcMld:
 
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
+        try:
+            bin_vars = self.mpc_model.presolve().NumBinVars
+        except:
+            bin_vars = 0
 
         self.mpc_model.NodeCount
         return u[:, [0]], {
@@ -290,5 +294,5 @@ class MpcMld:
             "cost": cost,
             "run_time": run_time,
             "nodes": nodes,
-            "bin_vars" : self.mpc_model.presolve().NumBinVars
+            "bin_vars": bin_vars,
         }
