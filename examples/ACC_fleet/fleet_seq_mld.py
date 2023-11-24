@@ -18,15 +18,15 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 2  # num cars
-N = 7  # controller horizon
-COST_2_NORM = False
+n = 5  # num cars
+N = 10  # controller horizon
+COST_2_NORM = True
 DISCRETE_GEARS = False
-HOMOGENOUS = False
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+HOMOGENOUS = True
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -45,7 +45,9 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-ep_len = 100  # length of episode (sim len)
+CO_OP = False
+
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -118,6 +120,8 @@ class LocalMpcMld(MpcMld):
 
         for k in range(N):
             obj += cost_func(self.x[:, [k]] - self.x_front[:, [k]] - temp_sep, Q_x_l)
+            if CO_OP and not trailer:
+                obj += cost_func(self.x_back[:, [k]] - self.x[:, [k]] - temp_sep, Q_x_l)
             obj += (
                 cost_func(u[:, [k]], Q_u_l)
                 + w * self.s_front[:, k]
@@ -152,6 +156,8 @@ class LocalMpcMld(MpcMld):
                 )
 
         obj += cost_func(self.x[:, [N]] - self.x_front[:, [N]] - temp_sep, Q_x_l)
+        if CO_OP and not trailer:
+            obj += cost_func(self.x_back[:, [N]] - self.x[:, [N]] - temp_sep, Q_x_l)
         obj += +w * self.s_front[:, N] + w * self.s_back[:, N]
 
         if not leader:
