@@ -21,14 +21,14 @@ np.random.seed(2)
 PLOT = False
 SAVE = True
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
 LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
-num_iters = 5
+num_iters = 4
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
 if len(sys.argv) > 2:
@@ -252,7 +252,9 @@ class LocalMpc(MpcMldCentDecup):
             for k in range(N):
                 obj += cost_func(u[i, [k]].reshape(1, 1), Q_u_l)
                 if k < N - 1:
-                    obj += cost_func(u[i, [k + 1]].reshape(1, 1) - u[i, [k]].reshape(1, 1), Q_du_l)
+                    obj += cost_func(
+                        u[i, [k + 1]].reshape(1, 1) - u[i, [k]].reshape(1, 1), Q_du_l
+                    )
 
         self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
@@ -409,9 +411,9 @@ class TrackingEventBasedCoordinator(MldAgent):
             self.temp_solve_time += max(
                 [self.agents[i].run_time for i in range(self.n)]
             )
-            self.temp_node_count = max(max(
-                [self.agents[i].node_count for i in range(self.n)]),
-                self.temp_node_count
+            self.temp_node_count = max(
+                max([self.agents[i].node_count for i in range(self.n)]),
+                self.temp_node_count,
             )
 
             # update state and control guesses based on the winner
