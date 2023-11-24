@@ -63,7 +63,7 @@ class CarFleet(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
             spread = 50
             spacing = 50
             starting_positions = [front_pos]
-            #starting_positions = [front_pos - spread * np.random.random()]
+            # starting_positions = [front_pos - spread * np.random.random()]
             for i in range(1, self.n):
                 starting_positions.append(
                     -spread * np.random.random() + starting_positions[-1] - spacing

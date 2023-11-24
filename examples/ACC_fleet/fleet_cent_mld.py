@@ -21,12 +21,12 @@ np.random.seed(2)
 PLOT = True
 SAVE = False
 
-n = 3  # num cars
-N = 5  # controller horizon
+n = 5  # num cars
+N = 10  # controller horizon
 COST_2_NORM = True
-DISCRETE_GEARS = True
+DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -46,7 +46,7 @@ if LEADER_TRAJ == 1:
     random_ICs = True
 
 w = 1e4  # slack variable penalty
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 
 acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
 leader_state = acc.get_leader_state()
