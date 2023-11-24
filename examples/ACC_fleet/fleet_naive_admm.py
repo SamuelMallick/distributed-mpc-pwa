@@ -20,8 +20,8 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
 DEBUG_PLOT = False  # when true, the admm iterations are plotted at each time step
 
@@ -32,7 +32,7 @@ DISCRETE_GEARS = False
 HOMOGENOUS = True
 LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
-admm_iters = 20  # fixed number of iterations for ADMM routine
+admm_iters = 100  # fixed number of iterations for ADMM routine
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
 if len(sys.argv) > 2:
@@ -52,7 +52,7 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-ep_len = 100  # length of episode (sim len)
+ep_len = 50  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling
@@ -80,7 +80,6 @@ leader_state = acc.get_leader_state()
 
 large_num = 100000  # large number for dumby bounds on vars
 rho = 0.5  # admm penalty
-
 
 
 class LocalMpcADMM(MpcMld):
@@ -391,6 +390,32 @@ class ADMMCoordinator(MldAgent):
             )
 
         if DEBUG_PLOT:
+            tot_resid = 0
+            for i in range(n):
+                tot_resid += sum(
+                    np.linalg.norm(
+                        admm_dict["x"][i][-1][:, time_step]
+                        - admm_dict["z"][i][-1][:, time_step]
+                    )
+                    for time_step in range(N)
+                )
+                if i != 0:
+                    tot_resid += sum(
+                        np.linalg.norm(
+                            admm_dict["x_back"][i - 1][-1][:, time_step]
+                            - admm_dict["z"][i][-1][:, time_step]
+                        )
+                        for time_step in range(N)
+                    )
+                if i != n - 1:
+                    tot_resid += sum(
+                        np.linalg.norm(
+                            admm_dict["x_front"][i + 1][-1][:, time_step]
+                            - admm_dict["z"][i][-1][:, time_step]
+                        )
+                        for time_step in range(N)
+                    )
+            print(f"Total residual = {tot_resid}")
             # centralized solution
             self.cent_mpc.solve_mpc(state)
             time_step = 0  # plot control/state iterations predicted at this time_step
@@ -403,13 +428,15 @@ class ADMMCoordinator(MldAgent):
                 plt.axhline(self.cent_mpc.u.X[agent, time_step], linestyle="--")
                 plt.show()
 
-                plt.plot(
-                    [
-                        admm_dict["x"][agent][i][0, time_step]
-                        - admm_dict["z"][agent][i][0, time_step]
-                        for i in range(admm_iters)
-                    ]
-                )
+                for a in range(n):
+                    plt.plot(
+                        [
+                            admm_dict["x"][a][i][0, time_step]
+                            - admm_dict["z"][a][i][0, time_step]
+                            for i in range(admm_iters)
+                        ]
+                    )
+                plt.title("Residual")
                 plt.show()
 
                 plt.plot(
