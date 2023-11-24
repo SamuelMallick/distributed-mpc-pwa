@@ -7,15 +7,16 @@ plt.rc("font", size=14)
 plt.style.use("bmh")
 
 nx_l = 2
-plot_len = 100
-name = "seq"
+plot_len = 50
+name = "admm20"
 DG = False
-Q = False
-n = 6
-N = 7
-LT = 2
+Q = True
+HOM = True
+n = 5
+N = 5
+LT = 1
 with open(
-    f"examples/ACC_fleet/data/{name}/perf_n/{name}_n_{n}_N_{N}_Q_{Q}_DG_{DG}_HOM_True_LT_{LT}.pkl",
+    f"{name}_n_{n}_N_{N}_Q_{Q}_DG_{DG}_HOM_{HOM}_LT_{LT}.pkl",
     "rb",
 ) as file:
     X = pickle.load(file)
@@ -43,4 +44,7 @@ axs[0].legend(["reference"])
 
 _, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
 axs.plot(U)
+
+_, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
+axs.plot(R.squeeze())
 plt.show()

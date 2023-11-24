@@ -1,12 +1,13 @@
 import pickle
 
 nx_l = 2
-n = 4
+n = 3
+N = 5
 plot_len = 100
-name = "event"
+name = "admm20"
 DG = True
 with open(
-    f"examples/ACC_fleet/data/{name}/model_comp/{name}_n_4_N_6_Q_False_DG_{DG}_HOM_True_LT_1.pkl",
+    f"{name}_n_{n}_N_{N}_Q_True_DG_{DG}_HOM_True_LT_1.pkl",
     "rb",
 ) as file:
     X = pickle.load(file)
@@ -22,7 +23,7 @@ dg_time = sum(solve_times) / len(solve_times)
 
 DG = False
 with open(
-    f"examples/ACC_fleet/data/{name}/model_comp/{name}_n_4_N_6_Q_False_DG_{DG}_HOM_True_LT_1.pkl",
+    f"{name}_n_{n}_N_{N}_Q_True_DG_{DG}_HOM_True_LT_1.pkl",
     "rb",
 ) as file:
     X = pickle.load(file)
