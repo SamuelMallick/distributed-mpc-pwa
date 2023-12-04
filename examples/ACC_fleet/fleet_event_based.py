@@ -18,11 +18,13 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(2)
 
+DEBUG = False
+
 PLOT = False
 SAVE = True
 
-n = 3  # num cars
-N = 5  # controller horizon
+n = 4  # num cars
+N = 4  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
@@ -48,7 +50,7 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-threshold = 0.1  # cost improvement must be more than this to consider communication
+threshold = 10  # cost improvement must be more than this to consider communication
 follow_bias = 1  # a slight bias added to the cost to favour following the vehicle in front in case of tiebrake in cost improvements
 
 ep_len = 100  # length of episode (sim len)
@@ -452,6 +454,22 @@ class TrackingEventBasedCoordinator(MldAgent):
 
             else:  # don't repeat the repetitions if no-one improved cost
                 break
+        
+        # debugging
+        if DEBUG:
+            cost_inc = 0
+            for i in range(n):
+                local_x = self.state_guesses[i]
+                local_u = self.control_guesses[i]
+                for k in range(N):
+                    if i == 0:
+                        front = self.agents[0].mpc.ref_traj.X
+                        sep_temp = np.zeros((2, 1))
+                    else:
+                        front = self.state_guesses[i-1]
+                        sep_temp = sep
+                    cost_inc += (local_x[:, k] - front[:, k] - sep_temp.T) @ Q_x_l @ (local_x[:, [k]] - front[:, [k]] - sep_temp) + local_u[:, k] @ Q_u_l @ local_u[:, [k]]
+                cost_inc += (local_x[:, N] - front[:, N] - sep_temp.T) @ Q_x_l @ (local_x[:, [N]] - front[:, [N]] - sep_temp)
 
         if DISCRETE_GEARS:
             return np.vstack(
