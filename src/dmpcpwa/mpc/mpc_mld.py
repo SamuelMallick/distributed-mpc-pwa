@@ -36,6 +36,7 @@ class MpcMld:
 
         mpc_model = gp.Model("mld_mpc")
         mpc_model.setParam("OutputFlag", 0)
+        mpc_model.setParam('Heuristics', 0)
         # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
 
         # Uncomment if you need to differentiate between infeasbile and unbounded
