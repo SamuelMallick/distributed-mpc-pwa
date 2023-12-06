@@ -18,7 +18,7 @@ class MpcMldCentDecup(MpcMld):
     """ "An mpc that converts the networked PWA mpc problem to MLD form.
     The PWA systems are assumed decoupled in the dynamics."""
 
-    def __init__(self, systems: list[dict], n: int, N: int) -> None:
+    def __init__(self, systems: list[dict], n: int, N: int, verbose=False) -> None:
         """Instantiate the mpc.
 
         Parameters
@@ -38,8 +38,8 @@ class MpcMldCentDecup(MpcMld):
         # build mld model
 
         mpc_model = gp.Model("mld_mpc")
-        mpc_model.setParam("OutputFlag", 0)
-        mpc_model.setParam('Heuristics', 0)
+        mpc_model.setParam("OutputFlag", verbose)
+        mpc_model.setParam("Heuristics", 0)
         # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
 
         # Uncomment if you need to differentiate between infeasbile and unbounded
