@@ -10,12 +10,12 @@ plt.rc("font", size=14)
 plt.style.use("bmh")
 
 nx_l = 2
-plot_len = 100
+plot_len = 50
 name = "cent"
 DG = False
 Q = True
 HOM = True
-n = 3
+n = 4
 N = 4
 LT = 1
 with open(
@@ -29,7 +29,7 @@ with open(
     node_counts = pickle.load(file)
     violations = pickle.load(file)
     leader_state = pickle.load(file)
-name = "event4"
+name = "event10"
 with open(
     f"{name}_n_{n}_N_{N}_Q_{Q}_DG_{DG}_HOM_{HOM}_LT_{LT}.pkl",
     "rb",
