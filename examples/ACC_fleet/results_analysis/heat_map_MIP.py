@@ -4,15 +4,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
+from dmpcpwa.utils.tikz import save2tikz
+
+plt.style.use("bmh")
 plt.rc("text", usetex=True)
 plt.rc("font", size=14)
-# plt.style.use("bmh")
 
 fig, axs = plt.subplots(5, 2, constrained_layout=True, sharex=True, sharey=True)
 
-names = ["cent", "decent", "seq", "event4", "admm20"]
+names = ["cent", "decent", "seq", "event6", "admm20"]
 
-n_range = [i for i in range(2, 9)]
+n_range = [i for i in range(2, 11)]
 N_range = [i for i in range(2, 6)]
 
 data = [np.zeros((len(n_range), len(N_range))) for i in range(10)]
@@ -70,8 +72,8 @@ for row in range(5):
         fmt=".2f",
         ax=axs[row, 1],
     )
-    axs[row, 0].set_yticks([0.5, 6.5])
-    axs[row, 0].set_yticklabels(["2", "8"])
+    axs[row, 0].set_yticks([0.5, 8.5])
+    axs[row, 0].set_yticklabels(["2", "10"])
     counter += 2
 
 axs[4, 0].set_xticks([0.5, 3.5])
@@ -85,6 +87,8 @@ axs[4, 0].set_ylabel(r"$n$ - admm (20)")
 
 axs[4, 0].set_xlabel(r"$N - \|\cdot\|_1$")
 axs[4, 1].set_xlabel(r"$N - \|\cdot\|_2^2$")
+
+save2tikz(plt.gcf())
 
 # Add labels to axes
 # fig.text(0.5, 0, 'N', ha='center')

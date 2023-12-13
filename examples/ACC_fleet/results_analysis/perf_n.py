@@ -4,23 +4,42 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
+from dmpcpwa.utils.tikz import save2tikz
+
 plt.rc("text", usetex=True)
 plt.rc("font", size=14)
 plt.style.use("bmh")
 
 nx_l = 2
 
-# types = ["cent", "decent", "seq", "event2", "event3","event4", "admm5", "admm10", "admm20"]
-types = ["cent", "decent", "seq", "event3", "event4", "admm10", "admm20"]
-# types = ["cent", "decent", "seq","event4", "admm20"]
-num_iter_vars = 2
+types = [
+    "cent",
+    "decent",
+    "seq",
+    "event4",
+    "event6",
+    "event10",
+    "admm20",
+    "admm50",
+]
+leg = [
+    "decent",
+    "seq",
+    "event (4)",
+    "event (6)",
+    "event (10)",
+    "admm (20)",
+    "admm (50)",
+]
+num_event_vars = 3
+num_admm_vars = 2
 
 LT = 1
 HOM = True
 DG = False
 Q = True
 n_sw = [i for i in range(2, 11)]
-N = 6
+N = 5
 
 track_costs = []
 time_min = []
@@ -57,11 +76,11 @@ for type in types:
         viols[counter].append(sum(violations) / 100)
     counter += 1
 
-# leg = ["decent", "seq", "event (2)","event (3)","event (4)", "admm (5)", "admm (10)", "admm (20)"]
-leg = ["decent", "seq", "event (3)", "event (4)", "admm (10)", "admm (20)"]
-# leg = ["decent", "seq","event (4)", "admm (20)"]
-lw = 1.5
-ms = 5
+
+# plotting params for all figs
+lw = 1.5  # line width
+ms = 5  # marker size
+mf = ["-x", "-o", "-o", ":v", ":v", ":v", "--s", "--s"]  # marker format
 
 # tracking cost as percentrage performance drop from centralized
 perf_drop = []
@@ -72,138 +91,42 @@ for i in range(1, counter):
             for j in range(len(track_costs[0]))
         ]
     )
-gs = GridSpec(3, 4, width_ratios=[3, 1, 1, 1])
-
-# _, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
-axs = plt.subplot(gs[:, :1])
-for i in range(counter - 1):
-    axs.plot(
-        n_sw,
-        np.asarray(perf_drop[i]).reshape(len(n_sw)),
-        "-o",
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i}",
-    )
-axs.legend(leg)
-axs.set_xlabel("$n$")
-axs.set_ylabel(r"$\%J$")
-axs.set_ylim(-25, 1000)
-y_lim = 300
-
-axs = [None] * 3
-# Add the three subplots on the right
-axs[0] = plt.subplot(gs[0, 1:])
-axs[1] = plt.subplot(gs[1, 1:])
-axs[2] = plt.subplot(gs[2, 1:])
-
-# _, axs = plt.subplots(3, 1, constrained_layout=True, sharex=True)
-for i in range(2):
-    axs[0].plot(
-        n_sw,
-        np.asarray(perf_drop[i]).reshape(len(n_sw)),
-        "-o",
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i}",
-    )
-# axs[0].legend(leg[:2])
-# axs[0].set_ylabel(r"$\%J$")
-axs[0].set_ylim(-25, y_lim)
-
-for i in range(2, 2 + num_iter_vars):
-    axs[1].plot(
-        n_sw,
-        np.asarray(perf_drop[i]).reshape(len(n_sw)),
-        "-o",
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i}",
-    )
-# axs[1].legend(leg[2:5])
-# axs[1].set_ylabel(r"$\%J$")
-axs[1].set_ylim(-25, y_lim)
-
-for i in range(2 + num_iter_vars, 2 + 2 * num_iter_vars):
-    axs[2].plot(
-        n_sw,
-        np.asarray(perf_drop[i]).reshape(len(n_sw)),
-        "-o",
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i}",
-    )
-# axs[2].legend(leg[7:8])
-axs[2].set_xlabel("$n$")
-# axs[2].set_ylabel(r"$\%J$")
-axs[2].set_ylim(-25, y_lim)
-
-plt.figure()
-gs = GridSpec(3, 4, width_ratios=[3, 1, 1, 1])
-
-axs = plt.subplot(gs[:, :1])
+# calculate time error bars
 error_lower = [
     [time_av[i][j] - time_min[i][j] for j in range(len(n_sw))] for i in range(counter)
 ]
 error_upper = [
     [time_max[i][j] - time_av[i][j] for j in range(len(n_sw))] for i in range(counter)
 ]
-for i in range(1, counter):
-    # axs.plot(n_sw, time_av[i], '-o')
-    # axs.fill_between(n_sw, time_max[i], time_min[i], alpha = 0.5)#, where=(time_max[i] > time_min[i]), interpolate=True, color='gray', alpha=0.5)
-    _, _, bars = axs.errorbar(
-        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
-        np.asarray(time_av[i]),
-        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
+
+# plot perf drop
+y_lim = 200
+_, axs = plt.subplots(
+    6,
+    1,
+    constrained_layout=True,
+    sharex=True,
+    gridspec_kw={"height_ratios": [1, 1, 0.6, 2, 1.2, 1]},
+)
+for i, leg_ in enumerate(leg):
+    axs[0].plot(5, 5, mf[i + 1], label=leg_, markerfacecolor="none")
+axs[0].set_axis_off()
+axs[0].legend(leg, ncol=2, loc="center")
+for i in range(counter - 1):
+    axs[1].plot(
+        n_sw,
+        np.asarray(perf_drop[i]).reshape(len(n_sw)),
+        mf[i + 1],
         linewidth=lw,
         markersize=ms,
-        fmt="-o",
-        capsize=4,
+        color=f"C{i}",
+        markerfacecolor="none",
     )
-    [bar.set_alpha(0.7) for bar in bars]
-axs.legend(leg)
-axs.set_xlabel("$n$")
-axs.set_ylabel("$t_{COMP}$")
+axs[1].set_ylabel(r"$\%J$")
+axs[1].set_ylim(-25, y_lim)
 
-axs = [None] * 3
-# Add the three subplots on the right
-axs[0] = plt.subplot(gs[0, 1:])
-axs[1] = plt.subplot(gs[1, 1:])
-axs[2] = plt.subplot(gs[2, 1:])
-y_lim = 2
+y_lim = 0.3
 for i in range(1, 3):
-    _, _, bars = axs[0].errorbar(
-        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
-        np.asarray(time_av[i]),
-        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i-1}",
-        fmt="-o",
-        capsize=4,
-    )
-    [bar.set_alpha(0.7) for bar in bars]
-# axs[0].legend(leg[:2])
-# axs[0].set_ylabel(r"$\%J$")
-axs[0].set_ylim(-0.1, y_lim)
-
-for i in range(3, 3 + num_iter_vars):
-    _, _, bars = axs[1].errorbar(
-        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
-        np.asarray(time_av[i]),
-        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
-        linewidth=lw,
-        markersize=ms,
-        color=f"C{i-1}",
-        fmt="-o",
-        capsize=4,
-    )
-    [bar.set_alpha(0.7) for bar in bars]
-# axs[1].legend(leg[2:5])
-# axs[1].set_ylabel(r"$\%J$")
-axs[1].set_ylim(-0.1, y_lim)
-
-for i in range(3 + num_iter_vars, 3 + 2 * num_iter_vars):
     _, _, bars = axs[2].errorbar(
         np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
         np.asarray(time_av[i]),
@@ -211,62 +134,133 @@ for i in range(3 + num_iter_vars, 3 + 2 * num_iter_vars):
         linewidth=lw,
         markersize=ms,
         color=f"C{i-1}",
-        fmt="-o",
+        fmt=mf[i],
         capsize=4,
+        markerfacecolor="none",
     )
     [bar.set_alpha(0.7) for bar in bars]
-# axs[2].legend(leg[5:8])
-axs[2].set_xlabel("$n$")
-# axs[2].set_ylabel(r"$\%J$")
 axs[2].set_ylim(-0.1, y_lim)
-
-plt.figure()
-gs = GridSpec(3, 4, width_ratios=[3, 1, 1, 1])
-
-axs = plt.subplot(gs[:, :1])
-for i in range(1, counter):
-    axs.plot(
-        n_sw,
-        nodes[i],
-        "-o",
+axs[2].set_ylabel("$t_{COMP}$")
+y_lim = 6
+for i in range(3, 3 + num_event_vars):
+    _, _, bars = axs[3].errorbar(
+        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
+        np.asarray(time_av[i]),
+        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
         linewidth=lw,
         markersize=ms,
+        color=f"C{i-1}",
+        fmt=mf[i],
+        capsize=4,
+        markerfacecolor="none",
     )
+    [bar.set_alpha(0.7) for bar in bars]
+axs[3].set_ylim(-0.1, y_lim)
+axs[3].set_ylabel("$t_{COMP}$")
+y_lim = 3.5
+for i in range(3 + num_event_vars, 3 + num_event_vars + num_admm_vars):
+    _, _, bars = axs[4].errorbar(
+        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
+        np.asarray(time_av[i]),
+        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
+        linewidth=lw,
+        markersize=ms,
+        color=f"C{i-1}",
+        fmt=mf[i],
+        capsize=4,
+        markerfacecolor="none",
+    )
+    [bar.set_alpha(0.7) for bar in bars]
+axs[4].set_ylabel("$t_{COMP}$")
+axs[4].set_ylim(-0.1, y_lim)
+for i in range(1, counter):
+    axs[5].plot(
+        n_sw, nodes[i], mf[i], linewidth=lw, markersize=ms, markerfacecolor="none"
+    )
+axs[5].set_ylabel(r"$\#nodes$")
+axs[5].set_yscale("log")
+axs[5].set_xlabel("$n$")
+save2tikz(plt.gcf())
+
+_, axs = plt.subplots(3, 1, constrained_layout=True, sharex=True)
+for i in range(2):
+    axs[0].plot(
+        n_sw,
+        np.asarray(perf_drop[i]).reshape(len(n_sw)),
+        mf[i + 1],
+        linewidth=lw,
+        markersize=ms,
+        color=f"C{i}",
+        markerfacecolor="none",
+    )
+axs[0].set_ylim(-25, y_lim)
+for i in range(2, 2 + num_event_vars):
+    axs[1].plot(
+        n_sw,
+        np.asarray(perf_drop[i]).reshape(len(n_sw)),
+        mf[i + 1],
+        linewidth=lw,
+        markersize=ms,
+        color=f"C{i}",
+        markerfacecolor="none",
+    )
+axs[1].set_ylim(-25, y_lim)
+for i in range(2 + num_event_vars, 2 + num_event_vars + num_admm_vars):
+    axs[2].plot(
+        n_sw,
+        np.asarray(perf_drop[i]).reshape(len(n_sw)),
+        mf[i + 1],
+        linewidth=lw,
+        markersize=ms,
+        color=f"C{i}",
+        markerfacecolor="none",
+    )
+axs[2].set_xlabel("$n$")
+axs[2].set_ylim(-25, y_lim)
+# save2tikz(plt.gcf())
+
+# plot times
+_, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
+y_lim = 5
+for i in range(1, counter):
+    _, _, bars = axs.errorbar(
+        np.asarray([n_sw[j] + 0.0 * i for j in range(len(n_sw))]),
+        np.asarray(time_av[i]),
+        yerr=[np.asarray(error_lower[i]), np.asarray(error_upper[i])],
+        linewidth=lw,
+        markersize=ms,
+        fmt=mf[i],
+        capsize=4,
+        markerfacecolor="none",
+    )
+    [bar.set_alpha(0.7) for bar in bars]
 axs.legend(leg)
 axs.set_xlabel("$n$")
-axs.set_ylabel(r"$\#nodes$")
+axs.set_ylabel("$t_{COMP}$")
+axs.set_ylim(-0.1, y_lim)
+# save2tikz(plt.gcf())
 
-axs = [None] * 3
-# Add the three subplots on the right
-axs[0] = plt.subplot(gs[0, 1:])
-axs[1] = plt.subplot(gs[1, 1:])
-axs[2] = plt.subplot(gs[2, 1:])
+_, axs = plt.subplots(3, 1, constrained_layout=True, sharex=True)
 y_lim = 1000
 for i in range(1, 3):
     axs[0].plot(n_sw, nodes[i], "-o", linewidth=lw, markersize=ms, color=f"C{i-1}")
 axs[0].set_ylim(-0.1, y_lim)
 
-for i in range(3, 3 + num_iter_vars):
+for i in range(3, 3 + num_event_vars):
     axs[1].plot(n_sw, nodes[i], "-o", linewidth=lw, markersize=ms, color=f"C{i-1}")
 axs[1].set_ylim(-0.1, y_lim)
 
-for i in range(3 + num_iter_vars, 3 + 2 * num_iter_vars):
+for i in range(3 + num_event_vars, 3 + num_event_vars + num_admm_vars):
     axs[2].plot(n_sw, nodes[i], "-o", linewidth=lw, markersize=ms, color=f"C{i-1}")
 axs[2].set_xlabel("$n$")
 axs[2].set_ylim(-0.1, y_lim)
+# save2tikz(plt.gcf())
 
 _, axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
 for i in range(1, counter):
-    axs.plot(
-        n_sw,
-        viols[i],
-        "-o",
-        linewidth=lw,
-        markersize=ms,
-    )
+    axs.plot(n_sw, viols[i], mf[i], linewidth=lw, markersize=ms, markerfacecolor="none")
 axs.legend(leg)
 axs.set_xlabel("$n$")
 axs.set_ylabel(r"$\#CV$")
-
-
+# save2tikz(plt.gcf())
 plt.show()
