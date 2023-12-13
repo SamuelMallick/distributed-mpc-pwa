@@ -22,11 +22,11 @@ PLOT = False
 SAVE = True
 
 n = 5  # num cars
-N = 3  # controller horizon
+N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])

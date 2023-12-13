@@ -125,12 +125,13 @@ class LocalMpc(MpcSwitching):
         self.set_dynamics(nx_l, nu_l, r, x, u, x_c_list)
 
         # normal constraints
-        for k in range(N):
+        for k in range(N + 1):
             self.constraint(f"state_{k}", system["D"] @ x[:, [k]], "<=", system["E"])
+        for k in range(N):
             self.constraint(f"control_{k}", system["F"] @ u[:, [k]], "<=", system["G"])
 
+        for k in range(N):
             # acceleration limits
-
             self.constraint(
                 f"acc_{k}", x[1, [k + 1]] - x[1, [k]], "<=", acc.a_acc * acc.ts
             )

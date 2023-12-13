@@ -18,11 +18,11 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(2)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
 n = 5  # num cars
-N = 10  # controller horizon
+N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
@@ -46,7 +46,7 @@ if LEADER_TRAJ == 1:
     random_ICs = True
 
 w = 1e4  # slack variable penalty
-ep_len = 50  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 
 acc = ACC(ep_len, N, leader_traj=LEADER_TRAJ)
 leader_state = acc.get_leader_state()

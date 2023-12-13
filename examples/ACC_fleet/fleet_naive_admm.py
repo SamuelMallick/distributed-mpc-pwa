@@ -20,8 +20,8 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(2)
 
-PLOT = True
-SAVE = False
+PLOT = False
+SAVE = True
 
 DEBUG_PLOT = False  # when true, the admm iterations are plotted at each time step
 
@@ -30,9 +30,9 @@ N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
-admm_iters = 100  # fixed number of iterations for ADMM routine
+admm_iters = 50  # fixed number of iterations for ADMM routine
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
 if len(sys.argv) > 2:
@@ -52,7 +52,7 @@ random_ICs = False
 if LEADER_TRAJ == 1:
     random_ICs = True
 
-ep_len = 50  # length of episode (sim len)
+ep_len = 100  # length of episode (sim len)
 Adj = np.zeros((n, n))  # adjacency matrix
 if n > 1:
     for i in range(n):  # make it chain coupling

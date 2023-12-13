@@ -14,7 +14,7 @@ class ACC:
     # local costs
     Q_x_l = np.diag([1, 0.1])
     Q_u_l = 1 * np.eye(nu_l)  # penalty on control effort
-    Q_du_l = 10 * np.eye(nu_l)  # penalty on variation in control effort
+    Q_du_l = 0 * np.eye(nu_l)  # penalty on variation in control effort
     w = 1e4  # penalty on slack violations
 
     sep = np.array([[-50], [0]])  # desired seperation between vehicles states

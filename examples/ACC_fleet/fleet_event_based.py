@@ -23,12 +23,12 @@ DEBUG = False
 PLOT = False
 SAVE = True
 
-n = 4  # num cars
-N = 4  # controller horizon
+n = 5  # num cars
+N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 num_iters = 4
 if len(sys.argv) > 1:
@@ -454,7 +454,7 @@ class TrackingEventBasedCoordinator(MldAgent):
 
             else:  # don't repeat the repetitions if no-one improved cost
                 break
-        
+
         # debugging
         if DEBUG:
             cost_inc = 0
@@ -466,10 +466,16 @@ class TrackingEventBasedCoordinator(MldAgent):
                         front = self.agents[0].mpc.ref_traj.X
                         sep_temp = np.zeros((2, 1))
                     else:
-                        front = self.state_guesses[i-1]
+                        front = self.state_guesses[i - 1]
                         sep_temp = sep
-                    cost_inc += (local_x[:, k] - front[:, k] - sep_temp.T) @ Q_x_l @ (local_x[:, [k]] - front[:, [k]] - sep_temp) + local_u[:, k] @ Q_u_l @ local_u[:, [k]]
-                cost_inc += (local_x[:, N] - front[:, N] - sep_temp.T) @ Q_x_l @ (local_x[:, [N]] - front[:, [N]] - sep_temp)
+                    cost_inc += (local_x[:, k] - front[:, k] - sep_temp.T) @ Q_x_l @ (
+                        local_x[:, [k]] - front[:, [k]] - sep_temp
+                    ) + local_u[:, k] @ Q_u_l @ local_u[:, [k]]
+                cost_inc += (
+                    (local_x[:, N] - front[:, N] - sep_temp.T)
+                    @ Q_x_l
+                    @ (local_x[:, [N]] - front[:, [N]] - sep_temp)
+                )
 
         if DISCRETE_GEARS:
             return np.vstack(
