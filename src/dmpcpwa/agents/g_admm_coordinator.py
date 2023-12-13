@@ -12,7 +12,7 @@ from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
 
-ADMM_DEBUG_PLOT = True
+ADMM_DEBUG_PLOT = False
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -26,7 +26,7 @@ logger.addHandler(console_handler)
 class GAdmmCoordinator(Agent):
     """Coordinates the greedy ADMM algorithm for PWA agents"""
 
-    admm_iters = 100
+    admm_iters = 50
     switching_iters = 50
 
     def __init__(
@@ -222,6 +222,12 @@ class GAdmmCoordinator(Agent):
 
             # perform ADMM step
             action_list, sol_list, error_flag = self.admm_coordinator.solve_admm(state)
+
+            for sol in sol_list:
+                if cs.mmax(sol.vals["s"]) > 0:
+                    sl = sol.vals["s"]
+                    print(f"slacks = {sl}")
+                    pass
 
             if not error_flag:
                 if ADMM_DEBUG_PLOT:
