@@ -24,7 +24,7 @@ class Cent_MPC(MpcMld):
     Q_u = block_diag(*[Q_u_l] * n)
 
     def __init__(self, system: dict, N: int) -> None:
-        super().__init__(system, N)
+        super().__init__(system, N, verbose=True)
 
         obj = 0
         for k in range(N):

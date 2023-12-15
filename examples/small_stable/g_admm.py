@@ -5,6 +5,7 @@ from typing import Literal
 
 import casadi as cs
 import gurobipy as gp
+from gymnasium import Env
 import matplotlib.pyplot as plt
 import numpy as np
 from csnlp import Nlp
@@ -31,18 +32,21 @@ from dmpcpwa.agents.no_control_agent import NoControlAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 
-SAVE_WARM_START = False
+SAVE_WARM_START = True
+CENT_WARM_START = True
 if len(sys.argv) > 1:
     SAVE_WARM_START = int(sys.argv[1])
+if len(sys.argv) > 2:
+    CENT_WARM_START = int(sys.argv[2])
 
-N = 7  # controller horizon
+N = 15  # controller horizon
 n = 3
 nx_l = 2
 nu_l = 1
 Q_x_l = np.array([[1, 0], [0, 1]])
 Q_u_l = 1 * np.array([[1]])
 
-ep_len = 50
+ep_len = 20
 
 Adj = get_adj()
 A_c1 = get_A_c1()
@@ -71,11 +75,11 @@ for i in range(len(system["S"])):
     systems[2]["Ac"] = systems[2]["Ac"] + [Ac_i]
 
 # terminal set
-# A, b = get_inv_set()
+A, b = get_inv_set()
 A = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
-b = 0.3 * np.ones((4, 1))
+b = 0.2 * np.ones((4, 1))
 
-w = 1000 * np.ones((1, b.shape[0]))  # penalty on slack vars for term set
+w = 500 * np.ones((1, b.shape[0]))  # penalty on slack vars for term set
 
 
 class LocalMpc(MpcSwitching):
@@ -160,19 +164,23 @@ class Cent_MPC(MpcMld):
         super().__init__(system, N, verbose=True)
 
         obj = 0
-        for k in range(N):
-            obj += (
-                self.x[:, k] @ self.Q_x @ self.x[:, [k]]
-                + self.u[:, k] @ self.Q_u @ self.u[:, [k]]
-            )
+        #for k in range(N):
+        #    obj += (
+        #        self.x[:, k] @ self.Q_x @ self.x[:, [k]]
+        #        + self.u[:, k] @ self.Q_u @ self.u[:, [k]]
+        #    )
         obj += self.x[:, N] @ self.Q_x @ self.x[:, [N]]
 
         self.mpc_model.addConstrs(
             A @ self.x[i : i + 2, [N]] <= b for i in range(0, 2 * n, 2)
         )
+        self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
 
-        # don't set the cost so we just find a feasible solution
-        # self.mpc_model.setObjective(obj, gp.GRB.MINIMIZE)
+        # so that Gurobi only searches for a feasbile sol
+        self.mpc_model.setParam("SolutionLimit", 1)
+
+        # limit threads to use cause the problem might be huuuuuuggggeeee
+        self.mpc_model.setParam('Threads', 4)
 
 
 class StableGAdmmCoordinator(GAdmmCoordinator):
@@ -203,15 +211,22 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
         )
         self.cent_mpc = cent_mpc
 
+    def on_timestep_end(self, env, episode: int, timestep: int) -> None:
+        return super().on_timestep_end(env, episode, timestep)
+
     def g_admm_control(self, state, warm_start=None):
         if self.first_step or self.prev_sol is None:
-            u, info = self.cent_mpc.solve_mpc(state)
-            warm_start = [info["u"][[i], :] for i in range(n)]
-            self.first_step = False
-            if SAVE_WARM_START:
-                with open("examples/small_stable/u.pkl", "wb") as file:
-                    # with open(f"examples\small_stable\u.pkl","wb") as file:
-                    pickle.dump(warm_start, file)
+            if CENT_WARM_START:
+                u, info = self.cent_mpc.solve_mpc(state)
+                warm_start = [info["u"][[i], :] for i in range(n)]
+                self.first_step = False
+                if SAVE_WARM_START:
+                    with open("examples/small_stable/u.pkl", "wb") as file:
+                        # with open(f"examples\small_stable\u.pkl","wb") as file:
+                        pickle.dump(warm_start, file)
+            else:
+                warm_start = None
+                self.first_step = False
         else:
             warm_start = [
                 np.hstack((self.prev_sol[i][:, 1:], self.prev_sol[i][:, [-1]]))

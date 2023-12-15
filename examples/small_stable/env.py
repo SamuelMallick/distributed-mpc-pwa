@@ -31,7 +31,8 @@ class Network(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
-        self.x = 0.1 * np.array([[-1.9, 1.2, 0.1, 1.6, 1.9, -1.6]]).T
+        #self.x = 1 * np.array([[-1.9, 1.2, 0.1, 1.6, 1.9, -1.6]]).T
+        self.x = 1 * np.array([[-1.9, 0.7, -1.5, -1.3, 1.9, -1.4]]).T
         return self.x, {}
 
     def get_stage_cost(
