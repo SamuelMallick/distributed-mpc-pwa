@@ -8,8 +8,8 @@ def plot_system(X, U):
         plt.plot(X[-1, 2 * i], X[-1, 2 * i + 1], "x", color=f"C{i}")
         # pass
     # plt.plot(X)
-    plt.xlim(-2.1, 2.1)
-    plt.ylim(-2.1, 2.1)
+    plt.xlim(-20.1, 20.1)
+    plt.ylim(-20.1, 20.1)
 
     plt.figure()
     plt.plot(U)

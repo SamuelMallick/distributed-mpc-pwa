@@ -4,15 +4,14 @@ import casadi as cs
 import gymnasium as gym
 import numpy as np
 import numpy.typing as npt
-from model import get_cent_system
+from model_2 import get_cent_system, get_cost_matrices, get_IC
 from scipy.linalg import block_diag
 
 
 class Network(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     """A chain of PWA mass spring dampers."""
 
-    Q_x_l = np.array([[1, 0], [0, 1]])
-    Q_u_l = 1 * np.array([[1]])
+    Q_x_l, Q_u_l = get_cost_matrices()
 
     n = 3
 
@@ -31,8 +30,7 @@ class Network(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
-        #self.x = 1 * np.array([[-1.9, 1.2, 0.1, 1.6, 1.9, -1.6]]).T
-        self.x = 1 * np.array([[-1.9, 0.7, -1.5, -1.3, 1.9, -1.4]]).T
+        self.x = get_IC()
         return self.x, {}
 
     def get_stage_cost(
@@ -50,6 +48,8 @@ class Network(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
         action = action.full()
         r = self.get_stage_cost(self.x, action)
 
+        w = random_vector_with_infinity_norm(2e-2)
+
         x_new = None
         for i in range(len(self.sys["S"])):
             if all(
@@ -63,5 +63,15 @@ class Network(gym.Env[npt.NDArray[np.floating], npt.NDArray[np.floating]]):
                 )
         if x_new is None:
             raise RuntimeError("No PWA region found for system.")
+
+        x_new = x_new + w
+
         self.x = x_new
         return x_new, r, False, False, {}
+
+
+def random_vector_with_infinity_norm(max_norm):
+    # Generate a random vector with inf norm less than max_norm
+    random_vector = np.random.uniform(-max_norm, max_norm, size=(6, 1))
+
+    return random_vector

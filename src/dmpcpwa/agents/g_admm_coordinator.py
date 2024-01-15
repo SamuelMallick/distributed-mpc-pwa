@@ -13,6 +13,7 @@ from mpcrl.agents.agent import ActType, ObsType
 from dmpcpwa.agents.pwa_agent import PwaAgent
 
 ADMM_DEBUG_PLOT = False
+DEBUG_PRINT = False
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -37,6 +38,7 @@ class GAdmmCoordinator(Agent):
         G: list[list[int]],
         Adj: np.ndarray,
         rho: float,
+        agent_class = PwaAgent,
         warmstart: Literal["last", "last-successful"] = "last-successful",
         name: str = None,
     ) -> None:
@@ -68,7 +70,7 @@ class GAdmmCoordinator(Agent):
         self.agents: list[PwaAgent] = []
         for i in range(self.n):
             self.agents.append(
-                PwaAgent(local_mpcs[i], local_fixed_parameters[i], systems[i])
+                agent_class(local_mpcs[i], local_fixed_parameters[i], systems[i])
             )
 
         # create ADMM coordinator
@@ -78,6 +80,7 @@ class GAdmmCoordinator(Agent):
         self.nu_l = local_mpcs[0].nu_l
 
         self.prev_sol = None
+        self.prev_traj = None
 
         # coordinator of ADMM using 1 iteration as g_admm coordinator checks sequences every ADMM iter
         self.admm_coordinator = AdmmCoordinator(
@@ -110,9 +113,9 @@ class GAdmmCoordinator(Agent):
             state, _ = env.reset(seed=current_seed, options=env_reset_options)
             truncated, terminated, timestep = False, False, 0
 
-            self.on_episode_start(env, episode)
+            self.on_episode_start(env, episode, state)
             for agent in self.agents:
-                agent.on_episode_start(env, episode)
+                agent.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
                 action, _, _, _ = self.g_admm_control(state)
@@ -223,12 +226,6 @@ class GAdmmCoordinator(Agent):
             # perform ADMM step
             action_list, sol_list, error_flag = self.admm_coordinator.solve_admm(state)
 
-            for sol in sol_list:
-                if cs.mmax(sol.vals["s"]) > 0:
-                    sl = sol.vals["s"]
-                    print(f"slacks = {sl}")
-                    pass
-
             if not error_flag:
                 if ADMM_DEBUG_PLOT:
                     for i in range(self.n):
@@ -264,6 +261,7 @@ class GAdmmCoordinator(Agent):
             )
 
         self.prev_sol = u
+        self.prev_traj = x_pred
         return cs.DM(action_list), sol_list, error_flag, infeas_flag
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):

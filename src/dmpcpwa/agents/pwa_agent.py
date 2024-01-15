@@ -108,7 +108,7 @@ class PwaAgent(Agent[SymType]):
                 )
         return s
 
-    def identify_regions(self, x: np.ndarray, u: np.ndarray, eps: int = 0):
+    def identify_regions(self, x: np.ndarray, u: np.ndarray, eps: float = 0.0000001):
         """Generate the indices of the regions where Sx+Ru<=T + eps is true."""
 
         regions = []

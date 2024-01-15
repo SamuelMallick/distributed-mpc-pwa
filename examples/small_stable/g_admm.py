@@ -5,81 +5,58 @@ from typing import Literal
 
 import casadi as cs
 import gurobipy as gp
-from gymnasium import Env
-import matplotlib.pyplot as plt
 import numpy as np
 from csnlp import Nlp
 from dmpcrl.core.admm import g_map
 from dmpcrl.mpc.mpc_admm import MpcAdmm
 from env import Network
 from gymnasium.wrappers import TimeLimit
-from model import (
-    get_A_c1,
-    get_A_c2,
+from model_2 import (
     get_adj,
     get_cent_system,
+    get_cost_matrices,
     get_inv_set,
+    get_local_coupled_systems,
     get_local_system,
+    get_terminal_K,
+    get_warm_start,
 )
 from mpcrl.wrappers.agents import Log
 from mpcrl.wrappers.envs import MonitorEpisodes
 from plotting import plot_system
 from scipy.linalg import block_diag
 
-from dmpcpwa.agents.g_admm_coordinator import GAdmmCoordinator
-from dmpcpwa.agents.mld_agent import MldAgent
-from dmpcpwa.agents.no_control_agent import NoControlAgent
+from dmpcpwa.agents.g_admm_coordinator import GAdmmCoordinator, PwaAgent
 from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 
-SAVE_WARM_START = True
+SAVE_WARM_START = False
 CENT_WARM_START = True
+MODEL_WARM_START = False
+USE_TERM_CONTROLLER = True
 if len(sys.argv) > 1:
     SAVE_WARM_START = int(sys.argv[1])
 if len(sys.argv) > 2:
     CENT_WARM_START = int(sys.argv[2])
 
-N = 15  # controller horizon
+N = 5  # controller horizon
 n = 3
 nx_l = 2
 nu_l = 1
-Q_x_l = np.array([[1, 0], [0, 1]])
-Q_u_l = 1 * np.array([[1]])
+Q_x_l, Q_u_l = get_cost_matrices()
 
-ep_len = 20
+ep_len = 30
 
 Adj = get_adj()
-A_c1 = get_A_c1()
-A_c2 = get_A_c2()
 G_map = g_map(Adj)
 
-# manually construct system descriptions and coupling
 system = get_local_system()
-systems = []  # list of systems, 1 for each agent
-systems.append(system.copy())
-Ac_i = [A_c1]
-systems[0]["Ac"] = []
-for i in range(len(system["S"])):
-    systems[0]["Ac"] = systems[0]["Ac"] + [Ac_i]
-
-systems.append(system.copy())
-Ac_i = [A_c2, A_c2]
-systems[1]["Ac"] = []
-for i in range(len(system["S"])):
-    systems[1]["Ac"] = systems[1]["Ac"] + [Ac_i]
-
-systems.append(system.copy())
-Ac_i = [A_c1]
-systems[2]["Ac"] = []
-for i in range(len(system["S"])):
-    systems[2]["Ac"] = systems[2]["Ac"] + [Ac_i]
+systems = get_local_coupled_systems()
 
 # terminal set
 A, b = get_inv_set()
-A = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
-b = 0.2 * np.ones((4, 1))
 
-w = 500 * np.ones((1, b.shape[0]))  # penalty on slack vars for term set
+w = 100 * np.ones((1, b.shape[0]))  # penalty on slack vars for term set
 
 
 class LocalMpc(MpcSwitching):
@@ -115,15 +92,15 @@ class LocalMpc(MpcSwitching):
                 self.constraint(
                     f"state_{x_n}_{k}", system["D"] @ x_n[:, [k]], "<=", system["E"]
                 )
+
         for k in range(N):
             self.constraint(f"control_{k}", system["F"] @ u[:, [k]], "<=", system["G"])
 
         s, _, _ = self.variable(
-            "s",
-            (b.shape[0], 1),
-            lb=0,
-        )  # slack var for distance constraint
+            "s", (b.shape[0], 1), lb=0, ub=0
+        )  # slack var for terminal constraint
         self.constraint(f"terminal", A @ x[:, [N]], "<=", b + s)
+
         # for x_n in x_c_list:
         # self.constraint(f"terminal{x_n}", A @ x_n[:, [N]], "<=", b)
 
@@ -136,24 +113,24 @@ class LocalMpc(MpcSwitching):
             + w @ s
         )
 
+        # store these to class to be reference later when u=Kx constraints are added
+        self.K = [self.parameter(f"K_{k}", (nu_l, nx_l)) for k in range(N)]
+        for k in range(N):
+            self.fixed_pars_init[f"K_{k}"] = np.zeros((nu_l, nx_l))
+        self.u = u
+        self.x = x
+
         opts = {
             "expand": True,
             "print_time": False,
-            "bound_consistency": True,
-            "calc_lam_x": True,
-            "calc_lam_p": False,
-            # "jit": True,
-            # "jit_cleanup": True,
-            "ipopt": {
-                # "linear_solver": "ma97",
-                # "linear_system_scaling": "mc19",
-                # "nlp_scaling_method": "equilibration-based",
-                "max_iter": 2000,
-                "sb": "yes",
-                "print_level": 0,
-            },
+            "record_time": True,
+            "error_on_fail": True,
+            "print_info": False,
+            "print_iter": False,
+            "print_header": False,
+            "max_iter": 2000,
         }
-        self.init_solver(opts, solver="ipopt")
+        self.init_solver(opts, solver="qrqp")
 
 
 class Cent_MPC(MpcMld):
@@ -164,7 +141,7 @@ class Cent_MPC(MpcMld):
         super().__init__(system, N, verbose=True)
 
         obj = 0
-        #for k in range(N):
+        # for k in range(N):
         #    obj += (
         #        self.x[:, k] @ self.Q_x @ self.x[:, [k]]
         #        + self.u[:, k] @ self.Q_u @ self.u[:, [k]]
@@ -180,17 +157,13 @@ class Cent_MPC(MpcMld):
         self.mpc_model.setParam("SolutionLimit", 1)
 
         # limit threads to use cause the problem might be huuuuuuggggeeee
-        self.mpc_model.setParam('Threads', 4)
+        self.mpc_model.setParam("Threads", 4)
 
 
 class StableGAdmmCoordinator(GAdmmCoordinator):
     # terminal controllers for the four PWA regions touching origin
-    K = [
-        np.array([[-1.67, 2.39]]),
-        np.array([[-2.14, 3.81]]),
-        np.array([[-1.78, 4.44]]),
-        np.array([[-1.43, 1.60]]),
-    ]
+    K = get_terminal_K()
+    term_flags = [False for i in range(n)]
     prev_x = [np.zeros((nx_l, N)) for i in range(n)]
     first_step = True
 
@@ -203,13 +176,16 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
         Adj,
         rho: float,
         cent_mpc,
+        agent_class = PwaAgent,
         warmstart: Literal["last", "last-successful"] = "last-successful",
         name: str = None,
     ) -> None:
         super().__init__(
-            local_mpcs, local_fixed_parameters, systems, G, Adj, rho, warmstart, name
+            local_mpcs, local_fixed_parameters, systems, G, Adj, rho, agent_class, warmstart, name
         )
         self.cent_mpc = cent_mpc
+        for i in range(n):
+            self.agents[i].set_K(self.K)
 
     def on_timestep_end(self, env, episode: int, timestep: int) -> None:
         return super().on_timestep_end(env, episode, timestep)
@@ -224,23 +200,58 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
                     with open("examples/small_stable/u.pkl", "wb") as file:
                         # with open(f"examples\small_stable\u.pkl","wb") as file:
                         pickle.dump(warm_start, file)
+            elif MODEL_WARM_START:
+                warm_start = get_warm_start(N)
             else:
                 warm_start = None
                 self.first_step = False
         else:
-            warm_start = [
-                np.hstack((self.prev_sol[i][:, 1:], self.prev_sol[i][:, [-1]]))
-                for i in range(n)
-            ]
+            prev_final_x = [self.prev_traj[i][:, [-1]] for i in range(n)]
+            prev_final_u = [self.prev_sol[i][:, [-1]] for i in range(n)]
+            warm_start = []
+            for i in range(n):
+                regions = self.agents[i].identify_regions(prev_final_x[i], prev_final_u[i])
+                warm_start.append(np.hstack((self.prev_sol[i][:, 1:], self.K[regions[0]] @ prev_final_x[i])))
 
         # check if agents are in terminal set - if they are set terminal controller
         # break global state into local pieces
-        x = [state[self.nx_l * i : self.nx_l * (i + 1), :] for i in range(self.n)]
-        for i in range(n):
-            if all(A @ x[i] <= b):
-                pass
+        if USE_TERM_CONTROLLER:
+            x = [state[self.nx_l * i : self.nx_l * (i + 1), :] for i in range(self.n)]
+            for i in range(n):
+                if all(A @ x[i] <= b):
+                    if not self.term_flags[i]:
+                        for k in range(N):
+                            # set linear control constraint
+                            self.agents[i].V.constraint(
+                                f"term_cntrl_{k}",
+                                self.agents[i].V.u[:, [k]],
+                                "==",
+                                self.agents[i].V.K[k] @ self.agents[i].V.x[:, [k]],
+                            )
+                        self.term_flags[i] = True
+
+            if all(self.term_flags):
+                action_list = []
+                x = [state[self.nx_l * i : self.nx_l * (i + 1), :] for i in range(self.n)]
+                for i in range(n):
+                    regions = self.agents[i].identify_regions(x[i], self.prev_sol[i][:, [-1]])
+                    action_list.append(self.K[regions[0]]@x[i])
+                return cs.DM(action_list), None, None, None
+        
         return super().g_admm_control(state, warm_start)
 
+class PwaAgentTerminal(PwaAgent):
+    K: list[np.ndarray] = []   # terminal controllers
+
+    def set_K(self, K):
+        self.K = K
+    
+    def set_sequence(self, s: list[int]):
+        if len(self.K) == 0:
+            raise RuntimeError("Linear controller must be set before sequence is set.")
+        for i in range(len(s)):
+            self.fixed_parameters[f"K_{i}"] = self.K[s[i]]
+        return super().set_sequence(s)
 
 # env
 env = MonitorEpisodes(
@@ -273,6 +284,7 @@ agent = Log(
         Adj,
         local_mpcs[0].rho,
         cent_mpc,
+        agent_class=PwaAgentTerminal,
     ),
     level=logging.DEBUG,
     log_frequencies={"on_timestep_end": 1},
@@ -289,4 +301,5 @@ else:
     U = np.squeeze(env.ep_actions)
     R = np.squeeze(env.ep_rewards)
 
+print(f"cost = {sum(R)}")
 plot_system(X, U)
