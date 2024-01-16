@@ -120,17 +120,40 @@ class LocalMpc(MpcSwitching):
         self.u = u
         self.x = x
 
-        opts = {
-            "expand": True,
-            "print_time": False,
-            "record_time": True,
-            "error_on_fail": True,
-            "print_info": False,
-            "print_iter": False,
-            "print_header": False,
-            "max_iter": 2000,
-        }
-        self.init_solver(opts, solver="qrqp")
+        solver = "qrqp"
+        if solver == "ipopt":
+            opts = {
+                "expand": True,
+                "show_eval_warnings": True,
+                "warn_initial_bounds": True,
+                "print_time": False,
+                "bound_consistency": True,
+                "calc_lam_x": True,
+                "calc_lam_p": False,
+                # "jit": True,
+                # "jit_cleanup": True,
+                "ipopt": {
+                    # "linear_solver": "ma97",
+                    # "linear_system_scaling": "mc19",
+                    # "nlp_scaling_method": "equilibration-based",
+                    "max_iter": 500,
+                    "sb": "yes",
+                    "print_level": 0,
+                },
+            }
+        else:
+            opts = {
+                "expand": True,
+                "print_time": False,
+                "record_time": True,
+                "error_on_fail": True,
+                "print_info": False,
+                "print_iter": False,
+                "print_header": False,
+                "max_iter": 2000,
+            }
+        
+        self.init_solver(opts, solver=solver)
 
 
 class Cent_MPC(MpcMld):
@@ -191,27 +214,6 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
         return super().on_timestep_end(env, episode, timestep)
 
     def g_admm_control(self, state, warm_start=None):
-        if self.first_step or self.prev_sol is None:
-            if CENT_WARM_START:
-                u, info = self.cent_mpc.solve_mpc(state)
-                warm_start = [info["u"][[i], :] for i in range(n)]
-                self.first_step = False
-                if SAVE_WARM_START:
-                    with open("examples/small_stable/u.pkl", "wb") as file:
-                        # with open(f"examples\small_stable\u.pkl","wb") as file:
-                        pickle.dump(warm_start, file)
-            elif MODEL_WARM_START:
-                warm_start = get_warm_start(N)
-            else:
-                warm_start = None
-                self.first_step = False
-        else:
-            prev_final_x = [self.prev_traj[i][:, [-1]] for i in range(n)]
-            prev_final_u = [self.prev_sol[i][:, [-1]] for i in range(n)]
-            warm_start = []
-            for i in range(n):
-                regions = self.agents[i].identify_regions(prev_final_x[i], prev_final_u[i])
-                warm_start.append(np.hstack((self.prev_sol[i][:, 1:], self.K[regions[0]] @ prev_final_x[i])))
 
         # check if agents are in terminal set - if they are set terminal controller
         # break global state into local pieces
@@ -228,6 +230,7 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
                                 "==",
                                 self.agents[i].V.K[k] @ self.agents[i].V.x[:, [k]],
                             )
+                        
                         self.term_flags[i] = True
 
             if all(self.term_flags):
@@ -237,6 +240,58 @@ class StableGAdmmCoordinator(GAdmmCoordinator):
                     regions = self.agents[i].identify_regions(x[i], self.prev_sol[i][:, [-1]])
                     action_list.append(self.K[regions[0]]@x[i])
                 return cs.DM(action_list), None, None, None
+            
+
+        # generate warm start for initial state
+        if self.first_step or self.prev_sol is None:   
+            if CENT_WARM_START:
+                u, info = self.cent_mpc.solve_mpc(state)
+                warm_start = [info["u"][[i], :] for i in range(n)]
+                self.first_step = False
+                if SAVE_WARM_START:
+                    with open("examples/small_stable/u.pkl", "wb") as file:
+                        # with open(f"examples\small_stable\u.pkl","wb") as file:
+                        pickle.dump(warm_start, file)
+            elif MODEL_WARM_START:
+                warm_start = get_warm_start(N)
+            else:
+                warm_start = None
+                self.first_step = False
+
+        # generate warm start from either shifted solution or terminal controller
+        else:
+            prev_final_x = [self.prev_traj[i][:, [-1]] for i in range(n)]
+            prev_final_u = [self.prev_sol[i][:, [-1]] for i in range(n)]
+            warm_start = []
+            for i in range(n):
+                regions = self.agents[i].identify_regions(prev_final_x[i], prev_final_u[i])
+                warm_start.append(np.hstack((self.prev_sol[i][:, 1:], self.K[regions[0]] @ prev_final_x[i])))
+
+            if USE_TERM_CONTROLLER:
+                # if any of the systems are now using terminal controllers, we generate a warm start that is u = Kx.
+                # to do this we have to rollout the states using the other systems' warm starts
+                if any(self.term_flags):
+                    x_temp = [np.zeros((self.nx_l, self.N)) for i in range(self.n)]
+                    for i in range(self.n):
+                        x_temp[i][:, [0]] = state[self.nx_l * i : self.nx_l * (i + 1), [0]]  # add the first known states to the temp
+                        if self.term_flags[i]:
+                            regions = self.agents[i].identify_regions(x_temp[i][:, [0]], self.prev_sol[i][:, [0]])  # note here that the second argument does nothing
+                            warm_start[i][:, [0]] = self.K[regions[0]] @ x_temp[i][:, [0]]
+
+                    for k in range(1, self.N):
+                        for i in range(self.n):
+                            xc_temp = []
+                            for j in range(self.n):
+                                if self.Adj[i, j] == 1:
+                                    xc_temp.append(x_temp[j][:, [k - 1]])
+                            x_temp[i][:, [k]] = self.agents[i].next_state(
+                                x_temp[i][:, [k - 1]], warm_start[i][:, [k - 1]], xc_temp
+                            )
+                            if self.term_flags[i]:
+                                regions = self.agents[i].identify_regions(x_temp[i][:, [k]], self.prev_sol[i][:, [k]])  # note here that the second argument does nothing
+                                warm_start[i][:, [k]] = self.K[regions[0]] @ x_temp[i][:, [k]]
+                    
+                    pass
         
         return super().g_admm_control(state, warm_start)
 
