@@ -7,7 +7,6 @@ from ACC_env import CarFleet
 from ACC_model import ACC
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
@@ -20,10 +19,10 @@ np.random.seed(2)
 
 DEBUG = False
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
@@ -332,9 +331,7 @@ class TrackingEventBasedCoordinator(MldAgent):
         local_mpcs: List[MpcMld]
             List of local MLD based MPCs - one for each agent.
         """
-        self._exploration: ExplorationStrategy = (
-            NoExploration()
-        )  # to keep compatable with Agent class
+        super().__init__(local_mpcs[0])
         self.n = len(local_mpcs)
         self.agents: list[MldAgent] = []
         for i in range(self.n):
@@ -514,7 +511,7 @@ class TrackingEventBasedCoordinator(MldAgent):
 
         return super().on_timestep_end(env, episode, timestep)
 
-    def on_episode_start(self, env: Env, episode: int) -> None:
+    def on_episode_start(self, env: Env, episode: int, state) -> None:
         self.agents[0].mpc.set_leader_traj(leader_state[:, 0 : N + 1])
         self.agents[1].mpc.set_leader_traj(leader_state[:, 0 : N + 1])
 
@@ -533,7 +530,7 @@ class TrackingEventBasedCoordinator(MldAgent):
                     (nu_l, N)
                 )
 
-        return super().on_episode_start(env, episode)
+        return super().on_episode_start(env, episode, state)
 
     def extrapolate_position(self, initial_pos, initial_vel):
         x_pred = np.zeros((nx_l, N + 1))

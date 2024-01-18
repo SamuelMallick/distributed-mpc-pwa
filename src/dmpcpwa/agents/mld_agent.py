@@ -2,9 +2,12 @@ from typing import Any
 
 import casadi as cs
 import numpy as np
+from csnlp.util.io import SupportsDeepcopyAndPickle
 from gymnasium import Env
 from mpcrl import Agent
+from mpcrl.core.callbacks import AgentCallbackMixin
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
+from mpcrl.util.named import Named
 
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
@@ -18,7 +21,18 @@ class MldAgent(Agent):
     ) -> None:
         """Constructor is overriden and the super class' instructor is not called as
         this agent uses an mpc that does not inheret from the MPC baseclass."""
-        self._exploration: ExplorationStrategy = NoExploration()  # to keep compatable
+
+        # this below is just to keep this class compatible with Agent init
+        Named.__init__(self, None)
+        SupportsDeepcopyAndPickle.__init__(self)
+        AgentCallbackMixin.__init__(self)
+        self._fixed_pars = None
+        self._exploration: ExplorationStrategy = NoExploration()
+        self._store_last_successful = True
+        self._last_action_on_fail = False
+        self._last_solution = None
+        self._last_action = None
+
         self.mpc = mpc
         self.x_pred = None  # stores most recent predicted state after being solved
         self.u_pred = None  # stores most recent predicted control after being solved
@@ -70,7 +84,7 @@ class MldAgent(Agent):
             self.reset(current_seed)
             state, _ = env.reset(seed=current_seed, options=env_reset_options)
             truncated, terminated, timestep = False, False, 0
-            self.on_episode_start(env, episode)
+            self.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
                 # changed origonal agents evaluate here to use the mld mpc

@@ -8,7 +8,6 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
@@ -18,10 +17,10 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
@@ -206,9 +205,7 @@ class TrackingSequentialMldCoordinator(MldAgent):
         local_mpcs: List[MpcMld]
             List of local MLD based MPCs - one for each agent.
         """
-        self._exploration: ExplorationStrategy = (
-            NoExploration()
-        )  # to keep compatable with Agent class
+        super().__init__(local_mpcs[0])  # to keep compatable with Agent class
         self.n = len(local_mpcs)
         self.agents: list[MldAgent] = []
         for i in range(self.n):
@@ -266,10 +263,10 @@ class TrackingSequentialMldCoordinator(MldAgent):
 
         return super().on_timestep_end(env, episode, timestep)
 
-    def on_episode_start(self, env: Env, episode: int) -> None:
+    def on_episode_start(self, env: Env, episode: int, state) -> None:
         x_goal = leader_state[:, 0 : N + 1]
         self.agents[0].mpc.set_x_front(x_goal)
-        return super().on_episode_start(env, episode)
+        return super().on_episode_start(env, episode, state)
 
 
 # env

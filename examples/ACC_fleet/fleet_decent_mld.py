@@ -8,7 +8,6 @@ from ACC_model import ACC
 from dmpcrl.core.admm import g_map
 from gymnasium import Env
 from gymnasium.wrappers import TimeLimit
-from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.wrappers.envs import MonitorEpisodes
 from mpcs.mpc_gear import MpcGear
 from plot_fleet import plot_fleet
@@ -18,10 +17,10 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
@@ -196,7 +195,8 @@ class LocalMpcGear(LocalMpcMld, MpcGear):
 
 class TrackingDecentMldCoordinator(MldAgent):
     def __init__(self, local_mpcs: list[MpcMld], nx_l: int, nu_l: int) -> None:
-        self._exploration: ExplorationStrategy = NoExploration()  # to keep compatable
+        super().__init__(local_mpcs[0])
+
         self.n = len(local_mpcs)
         self.nx_l = nx_l
         self.nu_l = nu_l
@@ -236,9 +236,9 @@ class TrackingDecentMldCoordinator(MldAgent):
         self.node_counts[env.step_counter - 1, :] = max(agent_node_counts)
         return super().on_timestep_end(env, episode, timestep)
 
-    def on_episode_start(self, env: Env, episode: int) -> None:
+    def on_episode_start(self, env: Env, episode: int, state) -> None:
         self.observe_states(env, timestep=0)
-        return super().on_episode_start(env, episode)
+        return super().on_episode_start(env, episode, state)
 
     def observe_states(self, env, timestep):
         for i in range(n):

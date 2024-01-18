@@ -18,15 +18,15 @@ from dmpcpwa.mpc.mpc_mld_cent_decup import MpcMldCentDecup
 
 np.random.seed(2)
 
-PLOT = False
-SAVE = True
+PLOT = True
+SAVE = False
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
 HOMOGENOUS = True
-LEADER_TRAJ = 2  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
+LEADER_TRAJ = 1  # "1" - constant velocity leader traj. Vehicles start from random ICs. "2" - accelerating leader traj. Vehicles start in perfect platoon.
 
 if len(sys.argv) > 1:
     n = int(sys.argv[1])
@@ -79,9 +79,9 @@ class TrackingMldAgent(MldAgent):
         self.bin_var_counts[env.step_counter - 1, :] = self.num_bin_vars
         return super().on_timestep_end(env, episode, timestep)
 
-    def on_episode_start(self, env: Env, episode: int) -> None:
+    def on_episode_start(self, env: Env, episode: int, state) -> None:
         self.mpc.set_leader_traj(leader_state[:, 0 : N + 1])
-        return super().on_episode_start(env, episode)
+        return super().on_episode_start(env, episode, state)
 
 
 # env

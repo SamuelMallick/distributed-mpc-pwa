@@ -20,7 +20,7 @@ np.random.seed(2)
 PLOT = True
 SAVE = False
 
-n = 5  # num cars
+n = 3  # num cars
 N = 5  # controller horizon
 COST_2_NORM = True
 DISCRETE_GEARS = False
@@ -224,9 +224,9 @@ class TrackingGAdmmCoordinator(GAdmmCoordinator):
         self.set_leader_traj(leader_state[:, timestep : (timestep + N + 1)])
         return super().on_timestep_end(env, episode, timestep)
 
-    def on_episode_start(self, env, episode: int) -> None:
+    def on_episode_start(self, env, episode: int, state) -> None:
         self.set_leader_traj(leader_state[:, 0 : N + 1])
-        return super().on_episode_start(env, episode)
+        return super().on_episode_start(env, episode, state)
 
     def set_leader_traj(self, leader_traj):
         for k in range(N + 1):  # we assume first agent is leader!
