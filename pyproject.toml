@@ -22,8 +22,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics"
 ]
 dependencies = [
-    "csnlp>=1.5.7",
-    "mpcrl>=1.1.7",
+    "csnlp>=1.5.9",
+    "mpcrl>=1.1.9",
     "numpy>=1.24.4",
     "casadi>=3.6.3",
     "scipy>=1.11.2",
