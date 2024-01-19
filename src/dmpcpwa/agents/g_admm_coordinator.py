@@ -81,6 +81,7 @@ class GAdmmCoordinator(Agent):
 
         self.prev_sol = None
         self.prev_traj = None
+        self.prev_sol_time = None
 
         # coordinator of ADMM using 1 iteration as g_admm coordinator checks sequences every ADMM iter
         self.admm_coordinator = AdmmCoordinator(
@@ -118,7 +119,10 @@ class GAdmmCoordinator(Agent):
                 agent.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
-                action, _, _, _ = self.g_admm_control(state)
+                action, sol_list, infeas_guess_flag, error_flag = self.g_admm_control(state)
+
+                if infeas_guess_flag or error_flag:
+                    raise RuntimeError('G_admm infeasible or error.')
 
                 state, r, truncated, terminated, _ = env.step(action)
 
@@ -151,6 +155,7 @@ class GAdmmCoordinator(Agent):
         action_list = None
         sol_list = None
         error_flag = False
+        sol_time = 0.0
 
         # break global state into local pieces
         x = [state[self.nx_l * i : self.nx_l * (i + 1), :] for i in range(self.n)]
@@ -226,6 +231,9 @@ class GAdmmCoordinator(Agent):
             # perform ADMM step
             action_list, sol_list, error_flag = self.admm_coordinator.solve_admm(state)
 
+            if not error_flag and all(['t_wall_total' in sol_list[i].stats for i in range(self.n)]):
+                sol_time += max([sol_list[i].stats['t_wall_total']for i in range(self.n)])
+
             if not error_flag:
                 if ADMM_DEBUG_PLOT:
                     for i in range(self.n):
@@ -263,9 +271,10 @@ class GAdmmCoordinator(Agent):
         if not error_flag and not infeas_flag:
             self.prev_sol = u
             self.prev_traj = x_pred
+            self.prev_sol_time = sol_time
 
         return (
-            cs.DM(action_list) if not infeas_flag else None,
+            cs.DM(action_list) if not infeas_flag and not error_flag else warm_start,
             sol_list,
             error_flag,
             infeas_flag,
