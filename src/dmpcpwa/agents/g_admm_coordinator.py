@@ -38,7 +38,7 @@ class GAdmmCoordinator(Agent):
         G: list[list[int]],
         Adj: np.ndarray,
         rho: float,
-        agent_class = PwaAgent,
+        agent_class=PwaAgent,
         warmstart: Literal["last", "last-successful"] = "last-successful",
         name: str = None,
     ) -> None:
@@ -160,10 +160,10 @@ class GAdmmCoordinator(Agent):
 
         infeas_flag = False
         u = warm_start
+
         # generate initial feasible coupling via dynamics rollout
-        try:
-            x_rout = self.dynamics_rollout(x, u)
-        except:
+        x_rout = self.dynamics_rollout(x, u)
+        if x_rout is None:
             logger.debug(f"Rollout of initial control guess {u} was infeasible.")
             infeas_flag = True
 
@@ -260,12 +260,19 @@ class GAdmmCoordinator(Agent):
                 switch_plot_list,
             )
 
-        self.prev_sol = u
-        self.prev_traj = x_pred
-        return cs.DM(action_list), sol_list, error_flag, infeas_flag
+        if not error_flag and not infeas_flag:
+            self.prev_sol = u
+            self.prev_traj = x_pred
+
+        return (
+            cs.DM(action_list) if not infeas_flag else None,
+            sol_list,
+            error_flag,
+            infeas_flag,
+        )
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
-        """For a given state and u, rollout the agents' dynamics step by step."""
+        """For a given state and u, rollout the agents' dynamics step by step. Return None if the u is infeasible."""
         x_temp = [np.zeros((self.nx_l, self.N)) for i in range(self.n)]
 
         for i in range(self.n):
@@ -276,9 +283,13 @@ class GAdmmCoordinator(Agent):
                 for j in range(self.n):
                     if self.Adj[i, j] == 1:
                         xc_temp.append(x_temp[j][:, [k - 1]])
-                x_temp[i][:, [k]] = self.agents[i].next_state(
+                next_state = self.agents[i].next_state(
                     x_temp[i][:, [k - 1]], u[i][:, [k - 1]], xc_temp
                 )
+                if next_state is None:
+                    return None
+                else:
+                    x_temp[i][:, [k]] = next_state
         return x_temp
 
     def plot_admm_iters(self, u_list, z_list, x_list, x_back_list, switch_list):

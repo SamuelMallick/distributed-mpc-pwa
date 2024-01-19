@@ -61,6 +61,7 @@ class PwaAgent(Agent[SymType]):
         """Increment the dynamics as x+ = A[i]x + B[i]u + c[i] + sum_j Ac[i]_j xc_j
         if S[i]x + R[i]u <= T.
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
+        If no PWA regions is found for the given x/u, None is returned.
         """
         for i in range(len(self.S)):
             if all(self.S[i] @ x + self.R[i] @ u <= self.T[i] + self.buffer):
@@ -74,7 +75,7 @@ class PwaAgent(Agent[SymType]):
                         + sum(self.Ac[i][j] @ xc[j] for j in range(self.num_neighbours))
                     )
 
-        raise RuntimeError("Didn't find PWA region for given state-control.")
+        return None
 
     def eval_sequences(
         self, x0: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None
