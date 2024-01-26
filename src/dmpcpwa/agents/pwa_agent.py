@@ -55,14 +55,18 @@ class PwaAgent(Agent[SymType]):
 
         self.num_neighbours = len(self.Ac[0])
 
-    def next_state(self, x: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None, eps = 0):
+    def next_state(
+        self, x: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None, eps=0
+    ):
         """Increment the dynamics as x+ = A[i]x + B[i]u + c[i] + sum_j Ac[i]_j xc_j
         if S[i]x + R[i]u <= T + eps.
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
         If no PWA regions is found for the given x/u, None is returned.
         """
 
-        next_state_options = [] # in case of boundary of PWA regions, there may be several next state options
+        next_state_options = (
+            []
+        )  # in case of boundary of PWA regions, there may be several next state options
         for i in range(len(self.S)):
             if all(self.S[i] @ x + self.R[i] @ u <= self.T[i] + eps):
                 if xc is None:
@@ -74,7 +78,7 @@ class PwaAgent(Agent[SymType]):
                         + self.c[i]
                         + sum(self.Ac[i][j] @ xc[j] for j in range(self.num_neighbours))
                     )
-        
+
         if len(next_state_options) == 0:
             # no PWA regions found for given x/u
             return None
@@ -82,12 +86,20 @@ class PwaAgent(Agent[SymType]):
             # given x/u is on boundary of PWA regions
             for i in range(1, len(next_state_options)):
                 if np.linalg.norm(next_state_options[0] - next_state_options[i]) > 1e-5:
-                    print("Warning: x/u pair provided on boundary of non-continuous PWA dynamics, arbritrarily selecting a PWA region.")
+                    print(
+                        "Warning: x/u pair provided on boundary of non-continuous PWA dynamics, arbritrarily selecting a PWA region."
+                    )
             return next_state_options[0]
         else:
             return next_state_options[0]
-        
-    def next_state_with_region(self, s: int, x: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None,):
+
+    def next_state_with_region(
+        self,
+        s: int,
+        x: np.ndarray,
+        u: np.ndarray,
+        xc: list[np.ndarray] = None,
+    ):
         """Increment the dynamics as x+ = A[s]x + B[s]u + c[s] + sum_j Ac[s]_j xc_j
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
         """
@@ -100,7 +112,7 @@ class PwaAgent(Agent[SymType]):
                 + self.c[s]
                 + sum(self.Ac[s][j] @ xc[j] for j in range(self.num_neighbours))
             )
-        
+
     def eval_sequences(
         self, x0: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None
     ):
@@ -115,10 +127,12 @@ class PwaAgent(Agent[SymType]):
             x_new = []  # new branches of state trajectories
             s_new = []  # new branches of switching sequences
 
-            for i in range(len(x_list)): # for each branched state sequence
+            for i in range(len(x_list)):  # for each branched state sequence
                 current_regions = self.identify_regions(x_list[i][-1], u[:, [k]])
 
-                if len(current_regions) == 0:   # if no regions found, cancel this branch, as is infeasible
+                if (
+                    len(current_regions) == 0
+                ):  # if no regions found, cancel this branch, as is infeasible
                     x_list.pop(i)
                     s.pop(i)
 
@@ -126,25 +140,43 @@ class PwaAgent(Agent[SymType]):
                     if j == 0:  # first one gets appended to all current branch
                         s[i][k] = current_regions[0]
                         if xc is None:
-                            x_list[i].append(self.next_state_with_region(current_regions[0], x_list[i][-1], u[:, [k]]))
+                            x_list[i].append(
+                                self.next_state_with_region(
+                                    current_regions[0], x_list[i][-1], u[:, [k]]
+                                )
+                            )
                         else:
-                            x_list[i].append(self.next_state_with_region(current_regions[0], x_list[i][-1], u[:, [k]], [xc[i][:, [k]] for i in range(self.num_neighbours)]))
+                            x_list[i].append(
+                                self.next_state_with_region(
+                                    current_regions[0],
+                                    x_list[i][-1],
+                                    u[:, [k]],
+                                    [xc[i][:, [k]] for i in range(self.num_neighbours)],
+                                )
+                            )
                     else:
                         # for other identified regions, they define new branches
                         s_temp = s[i].copy()
                         s_temp[k] = current_regions[j]
                         s_new.append(s_temp)
-                        
+
                         x_temp = x_list[i].copy()
                         if xc is None:
-                            x_temp[k] = self.next_state_with_region(current_regions[j], x_list[i][-1], u[:, [k]])
+                            x_temp[k] = self.next_state_with_region(
+                                current_regions[j], x_list[i][-1], u[:, [k]]
+                            )
                         else:
-                            x_temp[k] = self.next_state_with_region(current_regions[j], x_list[i][-1], u[:, [k]], [xc[i][:, [k]] for i in range(self.num_neighbours)])
+                            x_temp[k] = self.next_state_with_region(
+                                current_regions[j],
+                                x_list[i][-1],
+                                u[:, [k]],
+                                [xc[i][:, [k]] for i in range(self.num_neighbours)],
+                            )
                         x_new.append(x_temp)
-                
+
                 # combine new branches
-                s = s + s_new
-                x_list = x_list + x_new
+            s = s + s_new
+            x_list = x_list + x_new
 
         # remove duplicates
         s_unique = []

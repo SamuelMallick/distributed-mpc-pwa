@@ -27,9 +27,6 @@ logger.addHandler(console_handler)
 class GAdmmCoordinator(Agent):
     """Coordinates the greedy ADMM algorithm for PWA agents"""
 
-    admm_iters = 50
-    switching_iters = 50
-
     def __init__(
         self,
         local_mpcs: list[MpcAdmm],
@@ -38,6 +35,8 @@ class GAdmmCoordinator(Agent):
         G: list[list[int]],
         Adj: np.ndarray,
         rho: float,
+        admm_iters: int = 50,
+        switching_iters=float("inf"),
         agent_class=PwaAgent,
         warmstart: Literal["last", "last-successful"] = "last-successful",
         name: str = None,
@@ -64,6 +63,9 @@ class GAdmmCoordinator(Agent):
         super().__init__(
             local_mpcs[0].copy(), local_fixed_parameters[0].copy(), warmstart, name
         )
+
+        self.admm_iters = admm_iters
+        self.switching_iters = switching_iters
 
         # construct the agents
         self.n = len(local_mpcs)
@@ -119,10 +121,12 @@ class GAdmmCoordinator(Agent):
                 agent.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
-                action, sol_list, infeas_guess_flag, error_flag = self.g_admm_control(state)
+                action, sol_list, infeas_guess_flag, error_flag = self.g_admm_control(
+                    state
+                )
 
                 if infeas_guess_flag or error_flag:
-                    raise RuntimeError('G_admm infeasible or error.')
+                    raise RuntimeError("G_admm infeasible or error.")
 
                 state, r, truncated, terminated, _ = env.step(action)
 
@@ -231,8 +235,12 @@ class GAdmmCoordinator(Agent):
             # perform ADMM step
             action_list, sol_list, error_flag = self.admm_coordinator.solve_admm(state)
 
-            if not error_flag and all(['t_wall_total' in sol_list[i].stats for i in range(self.n)]):
-                sol_time += max([sol_list[i].stats['t_wall_total']for i in range(self.n)])
+            if not error_flag and all(
+                ["t_wall_total" in sol_list[i].stats for i in range(self.n)]
+            ):
+                sol_time += max(
+                    [sol_list[i].stats["t_wall_total"] for i in range(self.n)]
+                )
 
             if not error_flag:
                 if ADMM_DEBUG_PLOT:
