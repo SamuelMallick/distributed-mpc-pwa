@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Literal
 
+# from dmpcpwa.utils.tikz import save2tikz
 import casadi as cs
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +13,7 @@ from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
 
-ADMM_DEBUG_PLOT = True
+ADMM_DEBUG_PLOT = False
 DEBUG_PRINT = False
 
 logger = logging.getLogger(__name__)
@@ -153,7 +154,7 @@ class GAdmmCoordinator(Agent):
 
     def g_admm_control(self, state, warm_start=None):
         """Get the control for the given state. Warm start parameter is an initial guess for control actions."""
-        seqs = [[0] * self.N for i in range(self.n)]  # switching seqs for agents
+        seqs = [[0] * (self.N + 1) for i in range(self.n)]  # switching seqs for agents
 
         xc = [None] * self.n
         x_pred = [None] * self.n
@@ -327,15 +328,19 @@ class GAdmmCoordinator(Agent):
 
         t = 0
         _, u_axs = plt.subplots(self.n, 1, constrained_layout=True, sharex=True)
-        _, res_axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
         for i in range(len(u_list)):
             u_axs[i].plot([u_list[i][k][:, t] for k in range(len(u_list[i]))])
             u_axs[i].plot(
-                switch_list[i], [u_list[i][k][0, t] for k in switch_list[i]], "o"
+                switch_list[i],
+                [u_list[i][k][0, t] for k in switch_list[i]],
+                "o",
+                markersize=3,
             )
             u_axs[i].set_ylabel(f"$u_{i}({t})$")
         u_axs[i].set_xlabel(r"$\tau$")
+        # save2tikz(plt.gcf())
 
+        _, res_axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
         res = []
         for tau in range(len(u_list[i])):
             res.append(0.0)
@@ -351,6 +356,7 @@ class GAdmmCoordinator(Agent):
         res_axs.plot(res)
         res_axs.set_ylabel(f"$r$")
         res_axs.set_xlabel(r"$\tau$")
+        # save2tikz(plt.gcf())
 
         print(f"Final residaul = {res[-1]}")
         plt.show()

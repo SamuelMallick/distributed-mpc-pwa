@@ -4,16 +4,17 @@ import casadi as cs
 import numpy as np
 from gymnasium import Env
 from mpcrl import Agent
-from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 
 
 class NoControlAgent(Agent):
     """An agent who uses zero control input."""
 
-    def __init__(self, nu: int) -> None:
+    def __init__(self, nu: int, mpc) -> None:
         """Initialise the no control agent with control dimension nu."""
-        self._exploration: ExplorationStrategy = NoExploration()  # to keep compatable
         self.nu = nu
+
+        # to keep compatible
+        super().__init__(mpc, {}, "last-succesful", None)
 
     def evaluate(
         self,
@@ -56,7 +57,7 @@ class NoControlAgent(Agent):
             self.reset(current_seed)
             state, _ = env.reset(seed=current_seed, options=env_reset_options)
             truncated, terminated, timestep = False, False, 0
-            self.on_episode_start(env, episode)
+            self.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
                 # changed origonal agents evaluate here not control
