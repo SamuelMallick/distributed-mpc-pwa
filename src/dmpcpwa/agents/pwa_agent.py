@@ -1,5 +1,3 @@
-from typing import Literal
-
 import numpy as np
 from csnlp.wrappers import Mpc
 from mpcrl.agents.agent import Agent, SymType
@@ -14,8 +12,6 @@ class PwaAgent(Agent[SymType]):
         mpc: Mpc,
         fixed_parameters: dict,
         pwa_system: dict,
-        warmstart: Literal["last", "last-successful"] = "last-successful",
-        name: str = None,
     ) -> None:
         """Initialise the agent.
 
@@ -37,14 +33,8 @@ class PwaAgent(Agent[SymType]):
         pwa_system: dict
             Contains {S, R, T, A, B, c, [Ac_j]}, where each is a list of matrices defining dynamics.
             When the inequality S[i]x + R[i]u <= T[i] is true, the dynamics are x^+ = A[i]x + B[i]u + c[i] + sum_j Ac_j[i] x_j.
-        warmstart: 'last' or 'last-successful', optional
-            The warmstart strategy for the MPC's NLP. If 'last-successful', the last
-            successful solution is used to warm start the solver for the next iteration.
-            If 'last', the last solution is used, regardless of success or failure.
-        name : str, optional
-            Name of the agent. If `None`, one is automatically created from a counter of
-            the class' instancies."""
-        super().__init__(mpc, fixed_parameters, warmstart, name)
+        """
+        super().__init__(mpc, fixed_parameters)
         self.S = pwa_system["S"]
         self.R = pwa_system["R"]
         self.T = pwa_system["T"]
@@ -56,13 +46,24 @@ class PwaAgent(Agent[SymType]):
         self.num_neighbours = len(self.Ac[0])
 
     def next_state(
-        self, x: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None, eps=0
+        self,
+        x: np.ndarray,
+        u: np.ndarray | None = None,
+        xc: list[np.ndarray] | None = None,
+        eps=0,
     ):
         """Increment the dynamics as x+ = A[i]x + B[i]u + c[i] + sum_j Ac[i]_j xc_j
         if S[i]x + R[i]u <= T + eps.
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
+        If control u is not passed the dynamics are assumed to switch depending only on x.
         If no PWA regions is found for the given x/u, None is returned.
         """
+        if u is None and not all(all(e == 0 for e in R) for R in self.R):
+            raise RuntimeError(
+                "No control input passed when PWA system switches based on control input!"
+            )
+        else:
+            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
 
         next_state_options = (
             []
@@ -97,12 +98,20 @@ class PwaAgent(Agent[SymType]):
         self,
         s: int,
         x: np.ndarray,
-        u: np.ndarray,
-        xc: list[np.ndarray] = None,
+        u: np.ndarray | None = None,
+        xc: list[np.ndarray] | None = None,
     ):
         """Increment the dynamics as x+ = A[s]x + B[s]u + c[s] + sum_j Ac[s]_j xc_j
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
+        If control u is not passed the dynamics are assumed to switch depending only on x.
         """
+        if u is None and not all(all(e == 0 for e in R) for R in self.R):
+            raise RuntimeError(
+                "No control input passed when PWA system switches based on control input!"
+            )
+        else:
+            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
+
         if xc is None:
             return self.A[s] @ x + self.B[s] @ u + self.c[s]
         else:
@@ -114,13 +123,15 @@ class PwaAgent(Agent[SymType]):
             )
 
     def eval_sequences(
-        self, x0: np.ndarray, u: np.ndarray, xc: list[np.ndarray] = None
+        self, x0: np.ndarray, u: np.ndarray, xc: list[np.ndarray] | None = None
     ):
-        """Evaluate all possible sqitching sequences of PWA dynamics by rolling out
-        dynamics from state x, applying control u, and coupled states xc."""
+        """Evaluate all possible switching sequences of PWA dynamics by rolling out
+        dynamics from state x, applying control u, and coupled states xc.
+        If the coupled states xc are not passed the coupling part of dynamics is ignored.
+        """
 
         N = u.shape[1]  # horizon length
-        s = [[0] * N]  # list of sequences, start with just zeros
+        s = [[0] * (N)]  # list of sequences, start with just zeros
         x_list = [[x0]]  # list of state trajectories for each sequence
 
         for k in range(N):
@@ -185,8 +196,18 @@ class PwaAgent(Agent[SymType]):
                 s_unique.append(seq)
         return s_unique
 
-    def identify_regions(self, x: np.ndarray, u: np.ndarray, eps: float = 0):
-        """Generate the indices of the regions where Sx+Ru<=T + eps is true."""
+    def identify_regions(
+        self, x: np.ndarray, u: np.ndarray | None = None, eps: float = 0
+    ):
+        """Generate the indices of the regions where Sx+Ru<=T + eps is true.
+        If control u is not passed the dynamics are assumed to switch depending only on x.
+        """
+        if u is None and not all(all(e == 0 for e in R) for R in self.R):
+            raise RuntimeError(
+                "No control input passed when PWA system switches based on control input!"
+            )
+        else:
+            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
 
         regions = []
         for i in range(len(self.S)):
