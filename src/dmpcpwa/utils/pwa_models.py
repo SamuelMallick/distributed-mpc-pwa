@@ -54,9 +54,9 @@ def cent_from_dist(d_systems: list[dict], Adj: np.ndarray):
             coupling_idx = 0  # keep track of which Ac_i_j corresponds to Adj[i, j]
             for j in range(n):
                 if Adj[i, j] == 1:
-                    A_diag[
-                        nx_l * i : nx_l * (i + 1), nx_l * j : nx_l * (j + 1)
-                    ] = d_systems[i]["Ac"][idxs[i]][coupling_idx]
+                    A_diag[nx_l * i : nx_l * (i + 1), nx_l * j : nx_l * (j + 1)] = (
+                        d_systems[i]["Ac"][idxs[i]][coupling_idx]
+                    )
                     coupling_idx += 1
 
         S.append(block_diag(*S_tmp))

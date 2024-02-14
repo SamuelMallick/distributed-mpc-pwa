@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Literal
+from typing import Any
 
 # from dmpcpwa.utils.tikz import save2tikz
 import casadi as cs
@@ -36,7 +36,7 @@ class GAdmmCoordinator(Agent):
         debug_plot: bool = False,
         admm_iters: int = 50,
         switching_iters: int | float = float("inf"),
-        agent_class=PwaAgent
+        agent_class=PwaAgent,
     ) -> None:
         """Instantiates the coordinator, creating n PWA agents.
 
@@ -65,9 +65,7 @@ class GAdmmCoordinator(Agent):
 
         # to the super class we pass the first local mpc just to satisfy the constructor
         # we copy it so the parameters don't double up etc.
-        super().__init__(
-            local_mpcs[0].copy(), local_fixed_parameters[0].copy()
-        )
+        super().__init__(local_mpcs[0].copy(), local_fixed_parameters[0].copy())
 
         self.admm_iters = admm_iters
         self.switching_iters = switching_iters
@@ -75,7 +73,7 @@ class GAdmmCoordinator(Agent):
 
         # construct the agents
         self.n = len(local_mpcs)
-        self.agents: list[PwaAgent] = []
+        self.agents: list[agent_class] = []
         for i in range(self.n):
             self.agents.append(
                 agent_class(local_mpcs[i], local_fixed_parameters[i], systems[i])
@@ -209,7 +207,7 @@ class GAdmmCoordinator(Agent):
             if infeas_flag:
                 break
             logger.debug(f"Greedy admm iter {iter}")
-            # generate local sequences and choose one 
+            # generate local sequences and choose one
             if iter < self.switching_iters:
                 for i in range(self.n):
                     if iter == 0:  # first iter we must used rolled out state
@@ -305,11 +303,11 @@ class GAdmmCoordinator(Agent):
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
         """For a given state and u, rollout the agents' dynamics step by step. Return None if the u is infeasible."""
-        x_temp = [np.zeros((self.nx_l, self.N+1)) for i in range(self.n)]
+        x_temp = [np.zeros((self.nx_l, self.N + 1)) for i in range(self.n)]
 
         for i in range(self.n):
             x_temp[i][:, [0]] = x[i]  # add the first known states to the temp
-        for k in range(1, self.N+1):
+        for k in range(1, self.N + 1):
             for i in range(self.n):
                 xc_temp = []
                 for j in range(self.n):
