@@ -13,9 +13,6 @@ from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
 
-ADMM_DEBUG_PLOT = False
-DEBUG_PRINT = False
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
@@ -36,11 +33,10 @@ class GAdmmCoordinator(Agent):
         G: list[list[int]],
         Adj: np.ndarray,
         rho: float,
+        debug_plot: bool = False,
         admm_iters: int = 50,
-        switching_iters=float("inf"),
-        agent_class=PwaAgent,
-        warmstart: Literal["last", "last-successful"] = "last-successful",
-        name: str = None,
+        switching_iters: int | float = float("inf"),
+        agent_class=PwaAgent
     ) -> None:
         """Instantiates the coordinator, creating n PWA agents.
 
@@ -50,23 +46,32 @@ class GAdmmCoordinator(Agent):
             List of local MPCs for agents.
         local_fixed_parameters: List[dict]
             List of dictionaries for fixed parameters for agents.
-        systems : dict
+        systems: dict
             PWA model for each agent.
-        G :  List[List[int]]
+        G: List[List[int]]
             Map of local to global vars in ADMM.
         Adj: np.ndarray
-            Adjacency matrix for agent coupling
+            Adjacency matrix for agent coupling.
         rho: float
-            Augmented lagrangian penalty term."""
+            Augmented lagrangian penalty term.
+        debug_plot: bool
+            Flag to activate plotting the switching ADMM convergence for debugging.
+        admm_iters: int
+            Number of iterations for the switching ADMM procedure.
+        switching_iters: int
+            For iterations greater than switching_iters, switching is no longer permitted and the ADMM iterations are standard.
+        agent_class
+            The class to use for local agents."""
 
         # to the super class we pass the first local mpc just to satisfy the constructor
         # we copy it so the parameters don't double up etc.
         super().__init__(
-            local_mpcs[0].copy(), local_fixed_parameters[0].copy(), warmstart, name
+            local_mpcs[0].copy(), local_fixed_parameters[0].copy()
         )
 
         self.admm_iters = admm_iters
         self.switching_iters = switching_iters
+        self.debug_plot = debug_plot
 
         # construct the agents
         self.n = len(local_mpcs)
@@ -178,23 +183,23 @@ class GAdmmCoordinator(Agent):
             logger.debug(f"Rollout of initial control guess {u} was infeasible.")
             infeas_flag = True
 
-        if ADMM_DEBUG_PLOT:  # store control at each iter to plot ADMM convergence
+        if self.debug_plot:  # store control at each iter to plot ADMM convergence
             u_plot_list = [
                 [np.zeros((self.nu_l, self.N)) for k in range(self.admm_iters)]
                 for i in range(self.n)
             ]
             switch_plot_list = [[] for i in range(self.n)]
             z_plot_list = [
-                [np.zeros((self.nx_l, self.N)) for k in range(self.admm_iters)]
+                [np.zeros((self.nx_l, self.N + 1)) for k in range(self.admm_iters)]
                 for i in range(self.n)
             ]
             x_plot_list = [
-                [np.zeros((self.nx_l, self.N)) for k in range(self.admm_iters)]
+                [np.zeros((self.nx_l, self.N + 1)) for k in range(self.admm_iters)]
                 for i in range(self.n)
             ]
             x_full_plot_list = [
                 [
-                    np.zeros((self.nx_l * len(self.G[i]), self.N))
+                    np.zeros((self.nx_l * len(self.G[i]), self.N + 1))
                     for k in range(self.admm_iters)
                 ]
                 for i in range(self.n)
@@ -204,9 +209,7 @@ class GAdmmCoordinator(Agent):
             if infeas_flag:
                 break
             logger.debug(f"Greedy admm iter {iter}")
-            # generate local sequences and choose one  - CHOICE: this can be done with vars from local output of ADMM
-            # which may not have converged to consensus - therefore adding exploration OR a cooperative
-            # dynamics rollout as before the loop
+            # generate local sequences and choose one 
             if iter < self.switching_iters:
                 for i in range(self.n):
                     if iter == 0:  # first iter we must used rolled out state
@@ -232,7 +235,7 @@ class GAdmmCoordinator(Agent):
                             )
                             seqs[i] = new_seqs[0]  # for now choosing arbritrarily first
 
-                            if ADMM_DEBUG_PLOT:
+                            if self.debug_plot:
                                 switch_plot_list[i].append(iter)
                     # set sequences
                     self.agents[i].set_sequence(seqs[i])
@@ -248,7 +251,7 @@ class GAdmmCoordinator(Agent):
                 )
 
             if not error_flag:
-                if ADMM_DEBUG_PLOT:
+                if self.debug_plot:
                     for i in range(self.n):
                         u_plot_list[i][iter] = np.asarray(sol_list[i].vals["u"])
                         z_plot_list[i][iter] = self.admm_coordinator.z[
@@ -279,7 +282,7 @@ class GAdmmCoordinator(Agent):
             else:
                 break
 
-        if ADMM_DEBUG_PLOT:
+        if self.debug_plot:
             self.plot_admm_iters(
                 u_plot_list,
                 z_plot_list,
@@ -302,11 +305,11 @@ class GAdmmCoordinator(Agent):
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
         """For a given state and u, rollout the agents' dynamics step by step. Return None if the u is infeasible."""
-        x_temp = [np.zeros((self.nx_l, self.N)) for i in range(self.n)]
+        x_temp = [np.zeros((self.nx_l, self.N+1)) for i in range(self.n)]
 
         for i in range(self.n):
             x_temp[i][:, [0]] = x[i]  # add the first known states to the temp
-        for k in range(1, self.N):
+        for k in range(1, self.N+1):
             for i in range(self.n):
                 xc_temp = []
                 for j in range(self.n):
