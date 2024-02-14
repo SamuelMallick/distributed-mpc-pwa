@@ -48,22 +48,15 @@ class PwaAgent(Agent[SymType]):
     def next_state(
         self,
         x: np.ndarray,
-        u: np.ndarray | None = None,
+        u: np.ndarray,
         xc: list[np.ndarray] | None = None,
         eps=0,
     ):
         """Increment the dynamics as x+ = A[i]x + B[i]u + c[i] + sum_j Ac[i]_j xc_j
         if S[i]x + R[i]u <= T + eps.
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
-        If control u is not passed the dynamics are assumed to switch depending only on x.
         If no PWA regions is found for the given x/u, None is returned.
         """
-        if u is None and not all(all(e == 0 for e in R) for R in self.R):
-            raise RuntimeError(
-                "No control input passed when PWA system switches based on control input!"
-            )
-        else:
-            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
 
         next_state_options = (
             []
@@ -105,12 +98,13 @@ class PwaAgent(Agent[SymType]):
         If the coupled states xc are not passed the coupling part of dynamics is ignored.
         If control u is not passed the dynamics are assumed to switch depending only on x.
         """
-        if u is None and not all(all(e == 0 for e in R) for R in self.R):
-            raise RuntimeError(
-                "No control input passed when PWA system switches based on control input!"
-            )
-        else:
-            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
+        if u is None:
+            if not all(all(e == 0 for e in R) for R in self.R):
+                raise RuntimeError(
+                    "No control input passed when PWA system switches based on control input!"
+                )
+            else:
+                u = np.zeros((self.R[0].shape[1], 1))
 
         if xc is None:
             return self.A[s] @ x + self.B[s] @ u + self.c[s]
@@ -202,12 +196,13 @@ class PwaAgent(Agent[SymType]):
         """Generate the indices of the regions where Sx+Ru<=T + eps is true.
         If control u is not passed the dynamics are assumed to switch depending only on x.
         """
-        if u is None and not all(all(e == 0 for e in R) for R in self.R):
-            raise RuntimeError(
-                "No control input passed when PWA system switches based on control input!"
-            )
-        else:
-            u = np.zeros((self.T[0].shape[0], self.T[0].shape[0]))
+        if u is None:
+            if not all(all(e == 0 for e in R) for R in self.R):
+                raise RuntimeError(
+                    "No control input passed when PWA system switches based on control input!"
+                )
+            else:
+                u = np.zeros((self.R[0].shape[1], 1))
 
         regions = []
         for i in range(len(self.S)):
