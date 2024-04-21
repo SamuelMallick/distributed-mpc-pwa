@@ -8,6 +8,7 @@ from mpcrl import Agent
 from mpcrl.core.callbacks import AgentCallbackMixin
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
 from mpcrl.util.named import Named
+from mpcrl.core.warmstart import WarmStartStrategy
 
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
@@ -27,7 +28,11 @@ class MldAgent(Agent):
         SupportsDeepcopyAndPickle.__init__(self)
         AgentCallbackMixin.__init__(self)
         self._fixed_pars = None
+
+        # these params are just for compatibility with Agent class
         self._exploration: ExplorationStrategy = NoExploration()
+        self._warmstart = WarmStartStrategy("last")
+
         self._store_last_successful = True
         self._last_action_on_fail = False
         self._last_solution = None
@@ -89,7 +94,6 @@ class MldAgent(Agent):
             while not (truncated or terminated):
                 # changed origonal agents evaluate here to use the mld mpc
                 action = self.get_control(state)
-                action = cs.DM(action)
 
                 state, r, truncated, terminated, _ = env.step(action)
                 self.on_env_step(env, episode, timestep)

@@ -12,6 +12,7 @@ from mpcrl import Agent
 from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
+from dmpcpwa.utils.tikz import save2tikz
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -339,7 +340,7 @@ class GAdmmCoordinator(Agent):
             )
             u_axs[i].set_ylabel(f"$u_{i}({t})$")
         u_axs[i].set_xlabel(r"$\tau$")
-        # save2tikz(plt.gcf())
+        save2tikz(plt.gcf())
 
         _, res_axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
         res = []
@@ -357,7 +358,7 @@ class GAdmmCoordinator(Agent):
         res_axs.plot(res)
         res_axs.set_ylabel(f"$r$")
         res_axs.set_xlabel(r"$\tau$")
-        # save2tikz(plt.gcf())
+        save2tikz(plt.gcf())
 
         print(f"Final residaul = {res[-1]}")
         plt.show()
