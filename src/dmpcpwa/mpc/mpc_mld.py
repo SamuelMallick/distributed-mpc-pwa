@@ -37,12 +37,13 @@ class MpcMld:
         mpc_model = gp.Model("mld_mpc")
         mpc_model.setParam("OutputFlag", verbose)
         mpc_model.setParam("Heuristics", 0)
+        mpc_model.setParam('FeasibilityTol', 1e-3)
         if thread_limit is not None:
             mpc_model.params.threads = thread_limit
         # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
 
         # Uncomment if you need to differentiate between infeasbile and unbounded
-        mpc_model.setParam("DualReductions", 0)
+        # mpc_model.setParam("DualReductions", 0)
 
         x = mpc_model.addMVar(
             (n, N + 1), lb=-float("inf"), ub=float("inf"), name="x"
@@ -284,6 +285,7 @@ class MpcMld:
             x = np.zeros(self.x.shape)
             cost = float("inf")
             logger.info("Infeasible")
+            raise RuntimeError(f'Infeasible problem!')
 
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
