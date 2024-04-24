@@ -37,7 +37,7 @@ class MpcMld:
         mpc_model = gp.Model("mld_mpc")
         mpc_model.setParam("OutputFlag", verbose)
         mpc_model.setParam("Heuristics", 0)
-        mpc_model.setParam('FeasibilityTol', 1e-3)
+        # mpc_model.setParam('FeasibilityTol', 1e-3)
         if thread_limit is not None:
             mpc_model.params.threads = thread_limit
         # mpc_model.setParam("MIPStart", 1)  # using warm-starting from previous sol
@@ -281,11 +281,18 @@ class MpcMld:
             x = self.x.X
             cost = self.mpc_model.objVal
         else:
-            u = np.zeros((self.m, self.N))
-            x = np.zeros(self.x.shape)
-            cost = float("inf")
-            logger.info("Infeasible")
-            raise RuntimeError(f'Infeasible problem!')
+            # turn off presolve and try again
+            self.mpc_model.setParam('Presolve', 0)
+            self.mpc_model.reset()
+            self.mpc_model.optimize()  
+            if self.mpc_model.Status == 2:  # check for successful solve
+                u = self.u.X
+                x = self.x.X
+                cost = self.mpc_model.objVal
+                self.mpc_model.setParam('Presolve', 1)
+            else:   
+                logger.info("Infeasible")
+                raise RuntimeError(f'Infeasible problem!')
 
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
