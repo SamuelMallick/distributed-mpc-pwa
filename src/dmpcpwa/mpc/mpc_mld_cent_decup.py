@@ -18,7 +18,7 @@ class MpcMldCentDecup(MpcMld):
     """ "An mpc that converts the networked PWA mpc problem to MLD form.
     The PWA systems are assumed decoupled in the dynamics."""
 
-    def __init__(self, systems: list[dict], n: int, N: int, verbose=False, thread_limit: int | None = None) -> None:
+    def __init__(self, systems: list[dict], n: int, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state = True) -> None:
         """Instantiate the mpc.
 
         Parameters
@@ -60,7 +60,7 @@ class MpcMldCentDecup(MpcMld):
             x_l = x[nx_l * i : nx_l * (i + 1), :]
             u_l = u[nu_l * i : nu_l * (i + 1), :]
 
-            self.create_MLD_dynamics_and_constraints(systems[i], mpc_model, x_l, u_l, N)
+            self.create_MLD_dynamics_and_constraints(systems[i], mpc_model, x_l, u_l, N, constrain_first_state=constrain_first_state)
 
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n * nx_l, 1)), name="IC")

@@ -23,7 +23,7 @@ from dmpcpwa.mpc.mpc_mld import MpcMld
 from dmpcpwa.mpc.mpc_switching import MpcSwitching
 from dmpcpwa.utils.pwa_models import cent_from_dist
 
-SIM_TYPE = "g_admm"  # options: "mld", "g_admm", "sqp_admm"
+SIM_TYPE = "mld"  # options: "mld", "g_admm", "sqp_admm"
 
 # create system
 
@@ -207,7 +207,7 @@ for i in range(n):
     local_fixed_dist_parameters.append(local_mpcs[i].fixed_pars_init)
 
 # mld mpc
-mld_mpc = MpcMld(cent_system, N)
+mld_mpc = MpcMld(cent_system, N, constrain_first_state=False)
 mld_mpc.set_cost(Q_x, Q_u)
 
 # env

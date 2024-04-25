@@ -1,9 +1,9 @@
 import numpy as np
 from csnlp.wrappers import Mpc
-from mpcrl.agents.agent import Agent, SymType
+from mpcrl import Agent
 
 
-class PwaAgent(Agent[SymType]):
+class PwaAgent(Agent):
     """An agent who has knowledge of it's own PWA dynamics and can use this to do things such as
     identify PWA regions given state and control trajectories."""
 

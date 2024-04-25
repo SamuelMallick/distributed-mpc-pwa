@@ -9,7 +9,6 @@ from dmpcrl.core.admm import AdmmCoordinator
 from dmpcrl.mpc.mpc_admm import MpcAdmm
 from gymnasium import Env
 from mpcrl import Agent
-from mpcrl.agents.agent import ActType, ObsType
 
 from dmpcpwa.agents.pwa_agent import PwaAgent
 from dmpcpwa.utils.tikz import save2tikz
@@ -104,7 +103,7 @@ class GAdmmCoordinator(Agent):
 
     def evaluate(
         self,
-        env: Env[ObsType, ActType],
+        env: Env,
         episodes: int,
         deterministic: bool = True,
         seed: int = None,

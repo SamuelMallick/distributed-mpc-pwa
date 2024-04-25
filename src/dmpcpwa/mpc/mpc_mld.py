@@ -15,7 +15,7 @@ logger.addHandler(console_handler)
 class MpcMld:
     """An MPC that converts a PWA mpc problem into a MIP."""
 
-    def __init__(self, system: dict, N: int, verbose=False, thread_limit: int | None = None) -> None:
+    def __init__(self, system: dict, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state: bool = True) -> None:
         """Instantiate the mld based mpc. In the constructor pwa system is converted
         to mld and the associated dynamics and constraints are created, along with states
         and control variables.
@@ -53,7 +53,7 @@ class MpcMld:
         )  # control
 
         # create MLD dynamics from PWA
-        self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N)
+        self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N, constrain_first_state=constrain_first_state)
 
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n, 1)), name="IC")
@@ -68,7 +68,7 @@ class MpcMld:
 
         logger.critical("MLD MPC setup complete.")
 
-    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N):
+    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N, constrain_first_state: bool = True):
         # extract values from system
         S = system["S"]
         R = system["R"]
@@ -156,7 +156,8 @@ class MpcMld:
 
             # add state and input constraints to model, then binary and auxillary constraint, then dynamics constraints
 
-            mpc_model.addConstr(D @ x[:, [k]] <= E, name="state constraints")
+            if k > 0 or (k == 0 and constrain_first_state):
+                mpc_model.addConstr(D @ x[:, [k]] <= E, name="state constraints")
             mpc_model.addConstr(F @ u[:, [k]] <= G, name=f"control constraints_{k}")
 
             mpc_model.addConstrs(
