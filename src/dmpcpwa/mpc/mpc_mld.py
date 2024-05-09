@@ -282,19 +282,30 @@ class MpcMld:
             x = self.x.X
             cost = self.mpc_model.objVal
         else:
-            # turn off presolve and try again
-            self.mpc_model.setParam('Presolve', 0)
+            # turn off dual reductions and try again
+            self.mpc_model.setParam("DualReductions", 0)
             self.mpc_model.reset()
             self.mpc_model.optimize()  
             if self.mpc_model.Status == 2:  # check for successful solve
                 u = self.u.X
                 x = self.x.X
                 cost = self.mpc_model.objVal
-                self.mpc_model.setParam('Presolve', 1)
-            else:   
-                logger.info("Infeasible")
-                raise RuntimeError(f'Infeasible problem!')
-
+                self.mpc_model.setParam('DualReductions', 1)
+            else:  
+                # turn off presolve and try again 
+                self.mpc_model.setParam('Presolve', 0)
+                self.mpc_model.reset()
+                self.mpc_model.optimize()  
+                if self.mpc_model.Status == 2:  # check for successful solve
+                    u = self.u.X
+                    x = self.x.X
+                    cost = self.mpc_model.objVal
+                    self.mpc_model.setParam('DualReductions', 1)
+                    self.mpc_model.setParam('Presolve', 1)
+                else:  
+                    logger.info("Infeasible")
+                    raise RuntimeError(f'Infeasible problem!')
+                
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
         try:
