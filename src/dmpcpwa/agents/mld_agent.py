@@ -56,6 +56,7 @@ class MldAgent(Agent):
         seed: int = None,
         raises: bool = True,
         env_reset_options: dict[str, Any] = None,
+        open_loop: bool = False
     ):
         """Evaluates the agent in a given environment. Overriding the function of Agent
         to use the mld_mpc instead.
@@ -91,9 +92,20 @@ class MldAgent(Agent):
             truncated, terminated, timestep = False, False, 0
             self.on_episode_start(env, episode, state)
 
+            if open_loop:
+                _, info = self.get_control(state)
+                actions = info['u']
+                counter = 0
+
             while not (truncated or terminated):
                 # changed origonal agents evaluate here to use the mld mpc
-                action = self.get_control(state)
+                if not open_loop:
+                    action, _ = self.get_control(state)
+                else:
+                    if counter > actions.shape[1]:
+                        raise RuntimeError(f'Open loop actions of length {actions.shape[1]} where not enough for episode.')
+                    action = actions[:, [counter]]
+                    counter += 1
 
                 state, r, truncated, terminated, _ = env.step(action)
                 self.on_env_step(env, episode, timestep)
@@ -115,7 +127,7 @@ class MldAgent(Agent):
         self.run_time = info["run_time"]
         self.node_count = info["nodes"]
         self.num_bin_vars = info["bin_vars"]
-        return u
+        return u, info
 
     def set_cost(self, Q_x, Q_u, x_goal: np.ndarray = None, u_goal: np.ndarray = None):
         """Set cost of the agents mpc-MIP as sum_k x(k)' * Q_x * x(k) + u(k)' * Q_u * u(k).
