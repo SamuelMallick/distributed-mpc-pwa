@@ -274,7 +274,7 @@ class MpcMld:
         M = Q @ x
         return sum(x[i] * M[i] for i in range(n))
 
-    def solve_mpc(self, state):
+    def solve_mpc(self, state: np.ndarray, raises: bool = True):
         self.IC.RHS = state
         self.mpc_model.optimize()
         if self.mpc_model.Status == 2:  # check for successful solve
@@ -304,7 +304,12 @@ class MpcMld:
                     self.mpc_model.setParam('Presolve', 1)
                 else:  
                     logger.info("Infeasible")
-                    raise RuntimeError(f'Infeasible problem!')
+                    if raises:
+                        raise RuntimeError(f'Infeasible problem!')
+                    else:
+                        u = np.zeros((self.u.shape))
+                        x = np.zeros((self.x.shape))
+                        cost = float('inf')
                 
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
@@ -322,3 +327,22 @@ class MpcMld:
             "nodes": nodes,
             "bin_vars": bin_vars,
         }
+
+    def evaluate_cost(self, x0: np.ndarray, u: np.ndarray):
+        """Evalaute cost of MPC problem for a given x0 and u traj"""
+        if u.shape != self.u.shape:
+            raise ValueError(f'Expected u shape {self.u.shape}. Got {u.shape}.')
+        
+        self.IC.RHS = x0
+        self.u.ub = u
+        self.u.lb = u
+        self.mpc_model.optimize()
+        if self.mpc_model.Status == 2:  # check for successful solve
+            cost = self.mpc_model.objVal
+        else:
+            cost = 'inf'
+        self.x.ub = float('inf')
+        self.x.lb = -float('inf')
+        self.u.ub = float('inf')
+        self.u.lb = -float('inf')
+        return cost
