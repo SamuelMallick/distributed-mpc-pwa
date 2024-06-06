@@ -68,7 +68,7 @@ class MpcMld:
 
         logger.critical("MLD MPC setup complete.")
 
-    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N, constrain_first_state: bool = True):
+    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N, constrain_first_state: bool = True) -> gp.MVar:
         # extract values from system
         S = system["S"]
         R = system["R"]
@@ -213,7 +213,7 @@ class MpcMld:
             D @ x[:, [N]] <= E, name="state constraints"
         )  # final state constraint
 
-        self.delta = delta  # make delta avaialable for use in higher classes
+        return delta  # returns delta avaialable for use in higher classes
 
         # trivial terminal constraint condition x(N) = 0
         # mpc_model.addConstr(x[:, [N]] == np.zeros((n, 1)))
