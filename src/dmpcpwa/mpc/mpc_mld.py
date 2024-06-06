@@ -213,6 +213,8 @@ class MpcMld:
             D @ x[:, [N]] <= E, name="state constraints"
         )  # final state constraint
 
+        self.delta = delta  # make delta avaialable for use in higher classes
+
         # trivial terminal constraint condition x(N) = 0
         # mpc_model.addConstr(x[:, [N]] == np.zeros((n, 1)))
 
