@@ -18,7 +18,7 @@ class MpcMldCentDecup(MpcMld):
     """ "An mpc that converts the networked PWA mpc problem to MLD form.
     The PWA systems are assumed decoupled in the dynamics."""
 
-    def __init__(self, systems: list[dict], n: int, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state = True) -> None:
+    def __init__(self, systems: list[dict], n: int, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state = True, optimality_tol: float = 1e-6) -> None:
         """Instantiate the mpc.
 
         Parameters
@@ -39,6 +39,7 @@ class MpcMldCentDecup(MpcMld):
 
         mpc_model = gp.Model("mld_mpc")
         mpc_model.setParam("OutputFlag", verbose)
+        mpc_model.setParam("OptimalityTol", optimality_tol)
         mpc_model.setParam("Heuristics", 0)
         # mpc_model.setParam("Presolve", 0)
         # mpc_model.setParam('FeasibilityTol', 1e-3)

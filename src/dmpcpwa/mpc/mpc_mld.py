@@ -15,7 +15,7 @@ logger.addHandler(console_handler)
 class MpcMld:
     """An MPC that converts a PWA mpc problem into a MIP."""
 
-    def __init__(self, system: dict, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state: bool = True) -> None:
+    def __init__(self, system: dict, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state: bool = True, optimality_tol: float = 1e-6) -> None:
         """Instantiate the mld based mpc. In the constructor pwa system is converted
         to mld and the associated dynamics and constraints are created, along with states
         and control variables.
@@ -37,6 +37,7 @@ class MpcMld:
         mpc_model = gp.Model("mld_mpc")
         mpc_model.setParam("OutputFlag", verbose)
         mpc_model.setParam("Heuristics", 0)
+        mpc_model.setParam("OptimalityTol", optimality_tol)
         # mpc_model.setParam('FeasibilityTol', 1e-3)
         if thread_limit is not None:
             mpc_model.params.threads = thread_limit
