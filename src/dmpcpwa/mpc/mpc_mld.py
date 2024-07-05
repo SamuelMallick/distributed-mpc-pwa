@@ -277,42 +277,66 @@ class MpcMld:
         M = Q @ x
         return sum(x[i] * M[i] for i in range(n))
 
-    def solve_mpc(self, state: np.ndarray, raises: bool = True):
-        self.IC.RHS = state
+    def solve_mpc(self, state: np.ndarray, raises: bool = True, try_again_if_infeasible: bool = True) -> tuple[np.ndarray, dict]:
+        """Solve the MLD based MPC problem for a given initial state.
+        
+        Parameters
+        ----------
+        state: np.ndarray
+            Initial state to constraint to first state of the optimization problem.
+        raises: bool
+            If True, raises an error if the problem is infeasible.
+        try_again_if_infeasible: bool
+            If True, will try to solve the problem again with different settings if the problem is infeasible.
+            
+        Returns
+        -------
+        u: np.ndarray
+            First control input of the optimal trajectory.
+        dict
+            Dictionary containing information about the optimization.
+        """
+        self.IC.RHS = state # TODO type error
         self.mpc_model.optimize()
+        sol_found = False
         if self.mpc_model.Status == 2:  # check for successful solve
             u = self.u.X
             x = self.x.X
             cost = self.mpc_model.objVal
+            sol_found = True
         else:
-            # turn off dual reductions and try again
-            self.mpc_model.setParam("DualReductions", 0)
-            self.mpc_model.reset()
-            self.mpc_model.optimize()  
-            if self.mpc_model.Status == 2:  # check for successful solve
-                u = self.u.X
-                x = self.x.X
-                cost = self.mpc_model.objVal
-                self.mpc_model.setParam('DualReductions', 1)
-            else:  
-                # turn off presolve and try again 
-                self.mpc_model.setParam('Presolve', 0)
+            if not try_again_if_infeasible:
+                # turn off dual reductions and try again
+                self.mpc_model.setParam("DualReductions", 0)
                 self.mpc_model.reset()
                 self.mpc_model.optimize()  
                 if self.mpc_model.Status == 2:  # check for successful solve
                     u = self.u.X
                     x = self.x.X
                     cost = self.mpc_model.objVal
+                    sol_found = True
                     self.mpc_model.setParam('DualReductions', 1)
-                    self.mpc_model.setParam('Presolve', 1)
                 else:  
-                    logger.info("Infeasible")
-                    if raises:
-                        raise RuntimeError(f'Infeasible problem!')
-                    else:
-                        u = np.zeros((self.u.shape))
-                        x = np.zeros((self.x.shape))
-                        cost = float('inf')
+                    # turn off presolve and try again 
+                    self.mpc_model.setParam('Presolve', 0)
+                    self.mpc_model.reset()
+                    self.mpc_model.optimize()  
+                    if self.mpc_model.Status == 2:  # check for successful solve
+                        u = self.u.X
+                        x = self.x.X
+                        cost = self.mpc_model.objVal
+                        sol_found = True
+                        self.mpc_model.setParam('DualReductions', 1)
+                        self.mpc_model.setParam('Presolve', 1)
+
+        if not sol_found:
+            logger.info("Infeasible")
+            if raises:
+                raise RuntimeError(f'Infeasible problem!')
+            else:
+                u = np.zeros((self.u.shape))
+                x = np.zeros((self.x.shape))
+                cost = float('inf')
                 
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
