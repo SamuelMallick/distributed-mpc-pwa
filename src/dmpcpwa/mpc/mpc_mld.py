@@ -305,7 +305,7 @@ class MpcMld:
             cost = self.mpc_model.objVal
             sol_found = True
         else:
-            if not try_again_if_infeasible:
+            if try_again_if_infeasible:
                 # turn off dual reductions and try again
                 self.mpc_model.setParam("DualReductions", 0)
                 self.mpc_model.reset()
