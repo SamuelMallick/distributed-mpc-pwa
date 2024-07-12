@@ -119,8 +119,8 @@ class MldAgent(Agent):
         self.on_validation_end(env, returns)
         return returns
 
-    def get_control(self, state):
-        u, info = self.mpc.solve_mpc(state)
+    def get_control(self, state, raises: bool = False):
+        u, info = self.mpc.solve_mpc(state, raises=raises)
         self.x_pred = info["x"]
         self.u_pred = info["u"]
         self.cost_pred = info["cost"]
