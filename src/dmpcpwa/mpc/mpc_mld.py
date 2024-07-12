@@ -54,7 +54,7 @@ class MpcMld:
         )  # control
 
         # create MLD dynamics from PWA
-        self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N, constrain_first_state=constrain_first_state)
+        self.delta = self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N, constrain_first_state=constrain_first_state)
 
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n, 1)), name="IC")
@@ -69,7 +69,31 @@ class MpcMld:
 
         logger.critical("MLD MPC setup complete.")
 
-    def create_MLD_dynamics_and_constraints(self, system, mpc_model, x, u, N, constrain_first_state: bool = True) -> gp.MVar:
+    def create_MLD_dynamics_and_constraints(self, system: dict, mpc_model: gp.Model, x: gp.MVar, u: gp.MVar, N: int, constrain_first_state: bool = True) -> gp.MVar:
+        """Converts the PWA system into a MLD system via creating binary and continuous auxilarily variables and 
+        adding mixed-integer constraints.
+        
+        Parameters
+        ----------
+        system: dict
+            Dictionary containing the definition of the PWA system {S, R, T, A, B, c, D, E, F, G}.
+             When S[i]x+R[x]u <= T[i] -> x+ = A[i]x + B[i]u + c[i].
+             For MLD conversion the state and input must be constrained: Dx <= E, Fu <= G.
+        mpc_model: gp.Model
+            The gurobi model object to add the constraints to.
+        x: gp.MVar
+            The state variable.
+        u: gp.MVar
+            The control variable.
+        N: int
+            Prediction horizon length.
+        constrain_first_state: bool
+            If True, the first state is constrained via Dx <= E. Default is True.
+            
+        Returns
+        -------
+        gp.MVar
+            The binary auxillary variable delta which determines the PWA regions."""
         # extract values from system
         S = system["S"]
         R = system["R"]
@@ -276,6 +300,65 @@ class MpcMld:
         n = x.shape[0]
         M = Q @ x
         return sum(x[i] * M[i] for i in range(n))
+    
+    def solve_mpc_with_switching_sequence(self, state: np.ndarray, switching: np.ndarray, raises: bool = True) -> tuple[np.ndarray, dict]:
+        """Solve the MLD based MPC problem for a given initial state and switching sequence.
+        
+        Parameters
+        ----------
+        state: np.ndarray
+            Initial state to constraint to first state of the optimization problem.
+        switching: np.ndarray
+            Switching sequence to constraint the delta variables.
+        raises: bool
+            If True, raises an error if the problem is infeasible.
+            
+        Returns
+        -------
+        u: np.ndarray
+            First control input of the optimal trajectory.
+        dict
+            Dictionary containing information about the optimization.
+        """
+        if switching.shape[0] != self.N and switching.shape[0] != self.N-1:
+            raise ValueError(f'Expected switching shape {self.N} or {self.N-1}. Got {switching.shape[0]}.')
+        self.IC.RHS = state
+        delta = np.zeros((self.delta.shape))
+        if switching.shape[0] == self.N-1:
+            for i in range(1, self.N): # TODO remove loop
+                delta[switching[i-1], i] = 1
+                self.delta[:, i].ub = delta[:, i]
+                self.delta[:, i].lb = delta[:, i]
+        else:
+            for i in range(self.N):
+                delta[switching[i], i] = 1
+                self.delta[:, i].ub = delta[:, i]
+                self.delta[:, i].lb = delta[:, i]
+        self.mpc_model.optimize()
+        if self.mpc_model.Status == 2:  # check for successful solve
+            u = self.u.X
+            x = self.x.X
+            delta = self.delta.X
+            cost = self.mpc_model.objVal
+        else:
+            logger.info("Infeasible")
+            if raises:
+                raise RuntimeError(f'Infeasible problem!')
+            else:
+                u = np.zeros((self.u.shape))
+                x = np.zeros((self.x.shape))
+                delta = np.zeros((self.delta.shape))
+                cost = float('inf')
+        self.delta.ub = 1
+        self.delta.lb = 0
+        return u[:, [0]], {
+            "x": x,
+            "u": u,
+            "delta": delta,
+            "cost": cost,
+            "run_time": self.mpc_model.Runtime,
+            "nodes": self.mpc_model.NodeCount,
+        }
 
     def solve_mpc(self, state: np.ndarray, raises: bool = True, try_again_if_infeasible: bool = True) -> tuple[np.ndarray, dict]:
         """Solve the MLD based MPC problem for a given initial state.
@@ -302,6 +385,7 @@ class MpcMld:
         if self.mpc_model.Status == 2:  # check for successful solve
             u = self.u.X
             x = self.x.X
+            delta = self.delta.X
             cost = self.mpc_model.objVal
             sol_found = True
         else:
@@ -313,6 +397,7 @@ class MpcMld:
                 if self.mpc_model.Status == 2:  # check for successful solve
                     u = self.u.X
                     x = self.x.X
+                    delta = self.delta.X
                     cost = self.mpc_model.objVal
                     sol_found = True
                     self.mpc_model.setParam('DualReductions', 1)
@@ -324,6 +409,7 @@ class MpcMld:
                     if self.mpc_model.Status == 2:  # check for successful solve
                         u = self.u.X
                         x = self.x.X
+                        delta = self.delta.X
                         cost = self.mpc_model.objVal
                         sol_found = True
                         self.mpc_model.setParam('DualReductions', 1)
@@ -336,6 +422,7 @@ class MpcMld:
             else:
                 u = np.zeros((self.u.shape))
                 x = np.zeros((self.x.shape))
+                delta = np.zeros((self.delta.shape))
                 cost = float('inf')
                 
         run_time = self.mpc_model.Runtime
@@ -349,6 +436,7 @@ class MpcMld:
         return u[:, [0]], {
             "x": x,
             "u": u,
+            "delta": delta,
             "cost": cost,
             "run_time": run_time,
             "nodes": nodes,
