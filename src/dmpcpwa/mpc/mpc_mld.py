@@ -15,7 +15,15 @@ logger.addHandler(console_handler)
 class MpcMld:
     """An MPC that converts a PWA mpc problem into a MIP."""
 
-    def __init__(self, system: dict, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state: bool = True, optimality_tol: float = 1e-6) -> None:
+    def __init__(
+        self,
+        system: dict,
+        N: int,
+        verbose=False,
+        thread_limit: int | None = None,
+        constrain_first_state: bool = True,
+        optimality_tol: float = 1e-6,
+    ) -> None:
         """Instantiate the mld based mpc. In the constructor pwa system is converted
         to mld and the associated dynamics and constraints are created, along with states
         and control variables.
@@ -54,7 +62,9 @@ class MpcMld:
         )  # control
 
         # create MLD dynamics from PWA
-        self.delta = self.create_MLD_dynamics_and_constraints(system, mpc_model, x, u, N, constrain_first_state=constrain_first_state)
+        self.delta = self.create_MLD_dynamics_and_constraints(
+            system, mpc_model, x, u, N, constrain_first_state=constrain_first_state
+        )
 
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n, 1)), name="IC")
@@ -69,10 +79,18 @@ class MpcMld:
 
         logger.critical("MLD MPC setup complete.")
 
-    def create_MLD_dynamics_and_constraints(self, system: dict, mpc_model: gp.Model, x: gp.MVar, u: gp.MVar, N: int, constrain_first_state: bool = True) -> gp.MVar:
-        """Converts the PWA system into a MLD system via creating binary and continuous auxilarily variables and 
+    def create_MLD_dynamics_and_constraints(
+        self,
+        system: dict,
+        mpc_model: gp.Model,
+        x: gp.MVar,
+        u: gp.MVar,
+        N: int,
+        constrain_first_state: bool = True,
+    ) -> gp.MVar:
+        """Converts the PWA system into a MLD system via creating binary and continuous auxilarily variables and
         adding mixed-integer constraints.
-        
+
         Parameters
         ----------
         system: dict
@@ -89,7 +107,7 @@ class MpcMld:
             Prediction horizon length.
         constrain_first_state: bool
             If True, the first state is constrained via Dx <= E. Default is True.
-            
+
         Returns
         -------
         gp.MVar
@@ -292,18 +310,20 @@ class MpcMld:
     def min_2_norm(self, x, Q):
         """return the term x'@Q@x."""
         # handle the zero matrix case individually as Gurobi is wierd with it
-        if not Q.any(): 
+        if not Q.any():
             return 0
-        
+
         # have to do the tranpose part manually because gurobi does not support
         # taking the transpose of an Expr
         n = x.shape[0]
         M = Q @ x
         return sum(x[i] * M[i] for i in range(n))
-    
-    def solve_mpc_with_switching_sequence(self, state: np.ndarray, switching: np.ndarray, raises: bool = True) -> tuple[np.ndarray, dict]:
+
+    def solve_mpc_with_switching_sequence(
+        self, state: np.ndarray, switching: np.ndarray, raises: bool = True
+    ) -> tuple[np.ndarray, dict]:
         """Solve the MLD based MPC problem for a given initial state and switching sequence.
-        
+
         Parameters
         ----------
         state: np.ndarray
@@ -312,7 +332,7 @@ class MpcMld:
             Switching sequence to constraint the delta variables.
         raises: bool
             If True, raises an error if the problem is infeasible.
-            
+
         Returns
         -------
         u: np.ndarray
@@ -320,13 +340,15 @@ class MpcMld:
         dict
             Dictionary containing information about the optimization.
         """
-        if switching.shape[0] != self.N and switching.shape[0] != self.N-1:
-            raise ValueError(f'Expected switching shape {self.N} or {self.N-1}. Got {switching.shape[0]}.')
+        if switching.shape[0] != self.N and switching.shape[0] != self.N - 1:
+            raise ValueError(
+                f"Expected switching shape {self.N} or {self.N-1}. Got {switching.shape[0]}."
+            )
         self.IC.RHS = state
-        delta = np.zeros((self.delta.shape))
-        if switching.shape[0] == self.N-1:
-            for i in range(1, self.N): # TODO remove loop
-                delta[switching[i-1], i] = 1
+        delta = np.zeros(self.delta.shape)
+        if switching.shape[0] == self.N - 1:
+            for i in range(1, self.N):  # TODO remove loop
+                delta[switching[i - 1], i] = 1
                 self.delta[:, i].ub = delta[:, i]
                 self.delta[:, i].lb = delta[:, i]
         else:
@@ -343,12 +365,12 @@ class MpcMld:
         else:
             logger.info("Infeasible")
             if raises:
-                raise RuntimeError(f'Infeasible problem!')
+                raise RuntimeError(f"Infeasible problem!")
             else:
-                u = np.zeros((self.u.shape))
-                x = np.zeros((self.x.shape))
-                delta = np.zeros((self.delta.shape))
-                cost = float('inf')
+                u = np.zeros(self.u.shape)
+                x = np.zeros(self.x.shape)
+                delta = np.zeros(self.delta.shape)
+                cost = float("inf")
         self.delta.ub = 1
         self.delta.lb = 0
         return u[:, [0]], {
@@ -360,9 +382,14 @@ class MpcMld:
             "nodes": self.mpc_model.NodeCount,
         }
 
-    def solve_mpc(self, state: np.ndarray, raises: bool = True, try_again_if_infeasible: bool = True) -> tuple[np.ndarray, dict]:
+    def solve_mpc(
+        self,
+        state: np.ndarray,
+        raises: bool = True,
+        try_again_if_infeasible: bool = True,
+    ) -> tuple[np.ndarray, dict]:
         """Solve the MLD based MPC problem for a given initial state.
-        
+
         Parameters
         ----------
         state: np.ndarray
@@ -371,7 +398,7 @@ class MpcMld:
             If True, raises an error if the problem is infeasible.
         try_again_if_infeasible: bool
             If True, will try to solve the problem again with different settings if the problem is infeasible.
-            
+
         Returns
         -------
         u: np.ndarray
@@ -379,7 +406,7 @@ class MpcMld:
         dict
             Dictionary containing information about the optimization.
         """
-        self.IC.RHS = state # TODO type error
+        self.IC.RHS = state  # TODO type error
         self.mpc_model.optimize()
         sol_found = False
         if self.mpc_model.Status == 2:  # check for successful solve
@@ -393,38 +420,38 @@ class MpcMld:
                 # turn off dual reductions and try again
                 self.mpc_model.setParam("DualReductions", 0)
                 self.mpc_model.reset()
-                self.mpc_model.optimize()  
+                self.mpc_model.optimize()
                 if self.mpc_model.Status == 2:  # check for successful solve
                     u = self.u.X
                     x = self.x.X
                     delta = self.delta.X
                     cost = self.mpc_model.objVal
                     sol_found = True
-                    self.mpc_model.setParam('DualReductions', 1)
-                else:  
-                    # turn off presolve and try again 
-                    self.mpc_model.setParam('Presolve', 0)
+                    self.mpc_model.setParam("DualReductions", 1)
+                else:
+                    # turn off presolve and try again
+                    self.mpc_model.setParam("Presolve", 0)
                     self.mpc_model.reset()
-                    self.mpc_model.optimize()  
+                    self.mpc_model.optimize()
                     if self.mpc_model.Status == 2:  # check for successful solve
                         u = self.u.X
                         x = self.x.X
                         delta = self.delta.X
                         cost = self.mpc_model.objVal
                         sol_found = True
-                        self.mpc_model.setParam('DualReductions', 1)
-                        self.mpc_model.setParam('Presolve', 1)
+                        self.mpc_model.setParam("DualReductions", 1)
+                        self.mpc_model.setParam("Presolve", 1)
 
         if not sol_found:
             logger.info("Infeasible")
             if raises:
-                raise RuntimeError(f'Infeasible problem!')
+                raise RuntimeError(f"Infeasible problem!")
             else:
-                u = np.zeros((self.u.shape))
-                x = np.zeros((self.x.shape))
-                delta = np.zeros((self.delta.shape))
-                cost = float('inf')
-                
+                u = np.zeros(self.u.shape)
+                x = np.zeros(self.x.shape)
+                delta = np.zeros(self.delta.shape)
+                cost = float("inf")
+
         run_time = self.mpc_model.Runtime
         nodes = self.mpc_model.NodeCount
         try:
@@ -446,8 +473,8 @@ class MpcMld:
     def evaluate_cost(self, x0: np.ndarray, u: np.ndarray):
         """Evalaute cost of MPC problem for a given x0 and u traj"""
         if u.shape != self.u.shape:
-            raise ValueError(f'Expected u shape {self.u.shape}. Got {u.shape}.')
-        
+            raise ValueError(f"Expected u shape {self.u.shape}. Got {u.shape}.")
+
         self.IC.RHS = x0
         self.u.ub = u
         self.u.lb = u
@@ -455,9 +482,9 @@ class MpcMld:
         if self.mpc_model.Status == 2:  # check for successful solve
             cost = self.mpc_model.objVal
         else:
-            cost = 'inf'
-        self.x.ub = float('inf')
-        self.x.lb = -float('inf')
-        self.u.ub = float('inf')
-        self.u.lb = -float('inf')
+            cost = "inf"
+        self.x.ub = float("inf")
+        self.x.lb = -float("inf")
+        self.u.ub = float("inf")
+        self.u.lb = -float("inf")
         return cost

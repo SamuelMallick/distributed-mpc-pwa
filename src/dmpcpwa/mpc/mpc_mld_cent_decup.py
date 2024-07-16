@@ -18,7 +18,16 @@ class MpcMldCentDecup(MpcMld):
     """ "An mpc that converts the networked PWA mpc problem to MLD form.
     The PWA systems are assumed decoupled in the dynamics."""
 
-    def __init__(self, systems: list[dict], n: int, N: int, verbose=False, thread_limit: int | None = None, constrain_first_state = True, optimality_tol: float = 1e-6) -> None:
+    def __init__(
+        self,
+        systems: list[dict],
+        n: int,
+        N: int,
+        verbose=False,
+        thread_limit: int | None = None,
+        constrain_first_state=True,
+        optimality_tol: float = 1e-6,
+    ) -> None:
         """Instantiate the mpc.
 
         Parameters
@@ -56,14 +65,25 @@ class MpcMldCentDecup(MpcMld):
             (n * nu_l, N), lb=-float("inf"), ub=float("inf"), name="u"
         )  # control
 
-        self.delta: list[gp.MVar] = [] # store the binary region indicators for each agent
+        self.delta: list[gp.MVar] = (
+            []
+        )  # store the binary region indicators for each agent
         for i in range(n):
             # pull out local parts for agent i
             x_l = x[nx_l * i : nx_l * (i + 1), :]
             u_l = u[nu_l * i : nu_l * (i + 1), :]
 
-            self.delta.append(self.create_MLD_dynamics_and_constraints(systems[i], mpc_model, x_l, u_l, N, constrain_first_state=constrain_first_state))
-        
+            self.delta.append(
+                self.create_MLD_dynamics_and_constraints(
+                    systems[i],
+                    mpc_model,
+                    x_l,
+                    u_l,
+                    N,
+                    constrain_first_state=constrain_first_state,
+                )
+            )
+
         # IC constraint - gets updated everytime solve_mpc is called
         self.IC = mpc_model.addConstr(x[:, [0]] == np.zeros((n * nx_l, 1)), name="IC")
 

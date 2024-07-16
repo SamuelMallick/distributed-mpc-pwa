@@ -12,7 +12,7 @@ class PwaAgent(Agent):
         mpc: Mpc,
         fixed_parameters: dict,
         pwa_system: dict,
-        use_terminal_sequence: bool = False
+        use_terminal_sequence: bool = False,
     ) -> None:
         """Initialise the agent.
 
@@ -35,7 +35,7 @@ class PwaAgent(Agent):
             Contains {S, R, T, A, B, c, [Ac_j]}, where each is a list of matrices defining dynamics.
             When the inequality S[i]x + R[i]u <= T[i] is true, the dynamics are x^+ = A[i]x + B[i]u + c[i] + sum_j Ac_j[i] x_j.
         use_terminal_sequence: bool
-            A flag to indicate if the local switching sequences are of length N or N+1. 
+            A flag to indicate if the local switching sequences are of length N or N+1.
         """
         super().__init__(mpc, fixed_parameters)
         self.S = pwa_system["S"]
@@ -49,7 +49,9 @@ class PwaAgent(Agent):
         self.num_neighbours = len(self.Ac[0])
 
         if use_terminal_sequence and not all(all(e == 0 for e in R) for R in self.R):
-            raise RuntimeError("Cannot use a terminal sequence if the state switches based on the control input!")
+            raise RuntimeError(
+                "Cannot use a terminal sequence if the state switches based on the control input!"
+            )
         else:
             self.use_terminal_sequence = use_terminal_sequence
 
@@ -133,7 +135,9 @@ class PwaAgent(Agent):
         """
 
         N = u.shape[1]  # horizon length
-        s = [[0] * (N)] if not self.use_terminal_sequence else [[0] * (N+1)]  # list of sequences, start with just zeros
+        s = (
+            [[0] * (N)] if not self.use_terminal_sequence else [[0] * (N + 1)]
+        )  # list of sequences, start with just zeros
         x_list = [[x0]]  # list of state trajectories for each sequence
 
         for k in range(N):
@@ -192,8 +196,10 @@ class PwaAgent(Agent):
             x_list = x_list + x_new
 
         if self.use_terminal_sequence:
-            for i in range(len(x_list)):    
-                current_regions = self.identify_regions(x_list[i][-1])  # check region of final state
+            for i in range(len(x_list)):
+                current_regions = self.identify_regions(
+                    x_list[i][-1]
+                )  # check region of final state
                 for j in range(len(current_regions)):
                     if j == 0:
                         s[i][-1] = current_regions[0]

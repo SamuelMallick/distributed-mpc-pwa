@@ -1,14 +1,13 @@
 from typing import Any
 
-import casadi as cs
 import numpy as np
 from csnlp.util.io import SupportsDeepcopyAndPickle
 from gymnasium import Env
 from mpcrl import Agent
 from mpcrl.core.callbacks import AgentCallbackMixin
 from mpcrl.core.exploration import ExplorationStrategy, NoExploration
-from mpcrl.util.named import Named
 from mpcrl.core.warmstart import WarmStartStrategy
+from mpcrl.util.named import Named
 
 from dmpcpwa.mpc.mpc_mld import MpcMld
 
@@ -56,7 +55,7 @@ class MldAgent(Agent):
         seed: int = None,
         raises: bool = True,
         env_reset_options: dict[str, Any] = None,
-        open_loop: bool = False
+        open_loop: bool = False,
     ):
         """Evaluates the agent in a given environment. Overriding the function of Agent
         to use the mld_mpc instead.
@@ -94,7 +93,7 @@ class MldAgent(Agent):
 
             if open_loop:
                 _, info = self.get_control(state)
-                actions = info['u']
+                actions = info["u"]
                 counter = 0
 
             while not (truncated or terminated):
@@ -103,7 +102,9 @@ class MldAgent(Agent):
                     action, _ = self.get_control(state)
                 else:
                     if counter > actions.shape[1]:
-                        raise RuntimeError(f'Open loop actions of length {actions.shape[1]} where not enough for episode.')
+                        raise RuntimeError(
+                            f"Open loop actions of length {actions.shape[1]} where not enough for episode."
+                        )
                     action = actions[:, [counter]]
                     counter += 1
 
