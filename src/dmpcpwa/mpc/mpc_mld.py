@@ -360,7 +360,10 @@ class MpcMld:
         if self.mpc_model.Status == 2:  # check for successful solve
             u = self.u.X
             x = self.x.X
-            delta = self.delta.X
+            if isinstance(self.delta, list):
+                delta = np.vstack([d.X for d in self.delta])
+            else:    
+                delta = self.delta.X
             cost = self.mpc_model.objVal
         else:
             logger.info("Infeasible")
@@ -412,7 +415,10 @@ class MpcMld:
         if self.mpc_model.Status == 2:  # check for successful solve
             u = self.u.X
             x = self.x.X
-            delta = self.delta.X
+            if isinstance(self.delta, list):
+                delta = np.vstack([d.X for d in self.delta])
+            else:    
+                delta = self.delta.X
             cost = self.mpc_model.objVal
             sol_found = True
         else:
@@ -424,7 +430,10 @@ class MpcMld:
                 if self.mpc_model.Status == 2:  # check for successful solve
                     u = self.u.X
                     x = self.x.X
-                    delta = self.delta.X
+                    if isinstance(self.delta, list):
+                        delta = np.vstack([d.X for d in self.delta])
+                    else:    
+                        delta = self.delta.X
                     cost = self.mpc_model.objVal
                     sol_found = True
                     self.mpc_model.setParam("DualReductions", 1)
@@ -436,7 +445,10 @@ class MpcMld:
                     if self.mpc_model.Status == 2:  # check for successful solve
                         u = self.u.X
                         x = self.x.X
-                        delta = self.delta.X
+                        if isinstance(self.delta, list):
+                            delta = np.vstack([d.X for d in self.delta])
+                        else:    
+                            delta = self.delta.X
                         cost = self.mpc_model.objVal
                         sol_found = True
                         self.mpc_model.setParam("DualReductions", 1)
