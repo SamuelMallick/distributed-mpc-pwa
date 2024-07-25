@@ -345,7 +345,10 @@ class MpcMld:
                 f"Expected switching shape {self.N} or {self.N-1}. Got {switching.shape[0]}."
             )
         self.IC.RHS = state
-        delta = np.zeros(self.delta.shape)
+        if isinstance(self.delta, list):
+            delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
+        else:    
+            delta = np.zeros(self.delta.shape)
         if switching.shape[0] == self.N - 1:
             for i in range(1, self.N):  # TODO remove loop
                 delta[switching[i - 1], i] = 1
@@ -372,7 +375,10 @@ class MpcMld:
             else:
                 u = np.zeros(self.u.shape)
                 x = np.zeros(self.x.shape)
-                delta = np.zeros(self.delta.shape)
+                if isinstance(self.delta, list):
+                    delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
+                else:    
+                    delta = np.zeros(self.delta.shape)
                 cost = float("inf")
         self.delta.ub = 1
         self.delta.lb = 0
@@ -461,7 +467,10 @@ class MpcMld:
             else:
                 u = np.zeros(self.u.shape)
                 x = np.zeros(self.x.shape)
-                delta = np.zeros(self.delta.shape)
+                if isinstance(self.delta, list):
+                    delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
+                else:    
+                    delta = np.zeros(self.delta.shape)
                 cost = float("inf")
 
         run_time = self.mpc_model.Runtime
