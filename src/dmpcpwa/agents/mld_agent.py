@@ -120,8 +120,8 @@ class MldAgent(Agent):
         self.on_validation_end(env, returns)
         return returns
 
-    def get_control(self, state, raises: bool = False):
-        u, info = self.mpc.solve_mpc(state, raises=raises)
+    def get_control(self, state, raises: bool = False, try_again_if_infeasible: bool = False):
+        u, info = self.mpc.solve_mpc(state, raises=raises, try_again_if_infeasible=try_again_if_infeasible)
         self.x_pred = info["x"]
         self.u_pred = info["u"]
         self.cost_pred = info["cost"]
