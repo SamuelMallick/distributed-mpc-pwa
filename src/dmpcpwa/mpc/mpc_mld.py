@@ -346,8 +346,10 @@ class MpcMld:
             )
         self.IC.RHS = state
         if isinstance(self.delta, list):
-            delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
-        else:    
+            delta = np.zeros(
+                (len(self.delta) * self.delta[0].shape[0], self.delta[0].shape[1])
+            )
+        else:
             delta = np.zeros(self.delta.shape)
         if switching.shape[0] == self.N - 1:
             for i in range(1, self.N):  # TODO remove loop
@@ -365,7 +367,7 @@ class MpcMld:
             x = self.x.X
             if isinstance(self.delta, list):
                 delta = np.vstack([d.X for d in self.delta])
-            else:    
+            else:
                 delta = self.delta.X
             cost = self.mpc_model.objVal
         else:
@@ -376,8 +378,13 @@ class MpcMld:
                 u = np.zeros(self.u.shape)
                 x = np.zeros(self.x.shape)
                 if isinstance(self.delta, list):
-                    delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
-                else:    
+                    delta = np.zeros(
+                        (
+                            len(self.delta) * self.delta[0].shape[0],
+                            self.delta[0].shape[1],
+                        )
+                    )
+                else:
                     delta = np.zeros(self.delta.shape)
                 cost = float("inf")
         self.delta.ub = 1
@@ -423,7 +430,7 @@ class MpcMld:
             x = self.x.X
             if isinstance(self.delta, list):
                 delta = np.vstack([d.X for d in self.delta])
-            else:    
+            else:
                 delta = self.delta.X
             cost = self.mpc_model.objVal
             sol_found = True
@@ -438,7 +445,7 @@ class MpcMld:
                     x = self.x.X
                     if isinstance(self.delta, list):
                         delta = np.vstack([d.X for d in self.delta])
-                    else:    
+                    else:
                         delta = self.delta.X
                     cost = self.mpc_model.objVal
                     sol_found = True
@@ -453,7 +460,7 @@ class MpcMld:
                         x = self.x.X
                         if isinstance(self.delta, list):
                             delta = np.vstack([d.X for d in self.delta])
-                        else:    
+                        else:
                             delta = self.delta.X
                         cost = self.mpc_model.objVal
                         sol_found = True
@@ -468,8 +475,13 @@ class MpcMld:
                 u = np.zeros(self.u.shape)
                 x = np.zeros(self.x.shape)
                 if isinstance(self.delta, list):
-                    delta = np.zeros((len(self.delta)*self.delta[0].shape[0], self.delta[0].shape[1]))
-                else:    
+                    delta = np.zeros(
+                        (
+                            len(self.delta) * self.delta[0].shape[0],
+                            self.delta[0].shape[1],
+                        )
+                    )
+                else:
                     delta = np.zeros(self.delta.shape)
                 cost = float("inf")
 

@@ -85,12 +85,20 @@ def cent_from_dist(d_systems: list[dict], Adj: np.ndarray):
         "G": G,
     }
 
-def evalulate_cost(x: np.ndarray, u: np.ndarray, system: dict, Q_x: np.ndarray, Q_u: np.ndarray, seq: None | list[int] = None) -> float:
+
+def evalulate_cost(
+    x: np.ndarray,
+    u: np.ndarray,
+    system: dict,
+    Q_x: np.ndarray,
+    Q_u: np.ndarray,
+    seq: None | list[int] = None,
+) -> float:
     """Evaluate the cost of a trajectory given a PWA system. The cost is assumed to be quadratic
     with x'Q_x*x + u'Q_u*u for each state and control pair plus x'Q_x*x for the final state. Initial state is propagated by the
     PWA dynamics. If a seq is provided, the switching sequence is used to determine the regions
     rather than the PWA inqeualities.
-    
+
     Parameters
     ----------
     x: np.ndarray
@@ -105,7 +113,7 @@ def evalulate_cost(x: np.ndarray, u: np.ndarray, system: dict, Q_x: np.ndarray, 
         Control cost matrix.
     seq: None | list[int]
         Switching sequence.
-        
+
     Returns
     -------
     float
@@ -118,14 +126,22 @@ def evalulate_cost(x: np.ndarray, u: np.ndarray, system: dict, Q_x: np.ndarray, 
         cost += x.T @ Q_x @ x + u[:, k].T @ Q_u @ u[:, k]
         if seq is not None:
             r = seq[k]
-            if not all(system["S"][r] @ x + system["R"][r] @ u[:, [k]] <= system["T"][r] + 1e-6):
-                raise ValueError("Switching sequence provided does not satisfy PWA inequalities.")
+            if not all(
+                system["S"][r] @ x + system["R"][r] @ u[:, [k]] <= system["T"][r] + 1e-6
+            ):
+                raise ValueError(
+                    "Switching sequence provided does not satisfy PWA inequalities."
+                )
         else:
             region_found = False
             for j in range(len(system["S"])):
-                if all(system["S"][j] @ x + system["R"][j] @ u[:, [k]] <= system["T"][j]):
+                if all(
+                    system["S"][j] @ x + system["R"][j] @ u[:, [k]] <= system["T"][j]
+                ):
                     if region_found:
-                        raise ValueError("Multiple regions found for the current state and input.")
+                        raise ValueError(
+                            "Multiple regions found for the current state and input."
+                        )
                     r = j
                     region_found = True
             if not region_found:
@@ -133,12 +149,21 @@ def evalulate_cost(x: np.ndarray, u: np.ndarray, system: dict, Q_x: np.ndarray, 
         x = system["A"][r] @ x + system["B"][r] @ u[:, [k]] + system["c"][r]
     return cost + x.T @ Q_x @ x
 
-def evalulate_cost_distributed(x: np.ndarray | list[np.ndarray], u: np.ndarray | list[np.ndarray], systems: list[dict], adj: np.ndarray, Q_x: np.ndarray, Q_u: np.ndarray, seqs: None | list[list[int]] = None) -> float:
+
+def evalulate_cost_distributed(
+    x: np.ndarray | list[np.ndarray],
+    u: np.ndarray | list[np.ndarray],
+    systems: list[dict],
+    adj: np.ndarray,
+    Q_x: np.ndarray,
+    Q_u: np.ndarray,
+    seqs: None | list[list[int]] = None,
+) -> float:
     """Evaluate the cost of a trajectory given a distributed PWA system. The cost is assumed to be quadratic
     with x'Q_x*x + u'Q_u*u for each state and control pair plus x'Q_x*x for the final state. Initial state is propagated by the
     PWA dynamics. If a seq is provided, the switching sequence is used to determine the regions
     rather than the PWA inqeualities.
-    
+
     Parameters
     ----------
     x: np.ndarray | list[np.ndarray]
@@ -155,7 +180,7 @@ def evalulate_cost_distributed(x: np.ndarray | list[np.ndarray], u: np.ndarray |
         Control cost matrix, assumed to be local and the same for all agents.
     seq: None | list[list[int]]
         Switching sequences.
-        
+
     Returns
     -------
     float
@@ -174,14 +199,24 @@ def evalulate_cost_distributed(x: np.ndarray | list[np.ndarray], u: np.ndarray |
             cost += x[i].T @ Q_x @ x[i] + u[i][:, k].T @ Q_u @ u[i][:, k]
             if seqs is not None:
                 r = seqs[i][k]
-                if not all(systems[i]["S"][r] @ x[i] + systems[i]["R"][r] @ u[i][:, [k]] <= systems[i]["T"][r] + 1e-6):
-                    raise ValueError("Switching sequence provided does not satisfy PWA inequalities.")
+                if not all(
+                    systems[i]["S"][r] @ x[i] + systems[i]["R"][r] @ u[i][:, [k]]
+                    <= systems[i]["T"][r] + 1e-6
+                ):
+                    raise ValueError(
+                        "Switching sequence provided does not satisfy PWA inequalities."
+                    )
             else:
                 region_found = False
                 for j in range(len(systems[i]["S"])):
-                    if all(systems[i]["S"][j] @ x[i] + systems[i]["R"][j] @ u[i][:, [k]] <= systems[i]["T"][j]):
+                    if all(
+                        systems[i]["S"][j] @ x[i] + systems[i]["R"][j] @ u[i][:, [k]]
+                        <= systems[i]["T"][j]
+                    ):
                         if region_found:
-                            raise ValueError("Multiple regions found for the current state and input.")
+                            raise ValueError(
+                                "Multiple regions found for the current state and input."
+                            )
                         r = j
                         region_found = True
                 if not region_found:
@@ -192,6 +227,11 @@ def evalulate_cost_distributed(x: np.ndarray | list[np.ndarray], u: np.ndarray |
                 if adj[i, j] == 1:
                     coupling += systems[i]["Ac"][r][neighbor_count] @ x[j]
                     neighbor_count += 1
-            x_.append(systems[i]["A"][r] @ x[i] + systems[i]["B"][r] @ u[i][:, [k]] + systems[i]["c"][r]+ coupling)
+            x_.append(
+                systems[i]["A"][r] @ x[i]
+                + systems[i]["B"][r] @ u[i][:, [k]]
+                + systems[i]["c"][r]
+                + coupling
+            )
         x = x_
     return cost + sum(x[i].T @ Q_x @ x[i] for i in range(n))

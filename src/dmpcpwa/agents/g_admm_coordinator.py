@@ -130,9 +130,7 @@ class GAdmmCoordinator(Agent):
                 agent.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
-                action, infeas_guess_flag, error_flag, info = self.g_admm_control(
-                    state
-                )
+                action, infeas_guess_flag, error_flag, info = self.g_admm_control(state)
 
                 if infeas_guess_flag or error_flag:
                     raise RuntimeError("G_admm infeasible or error.")
@@ -163,9 +161,9 @@ class GAdmmCoordinator(Agent):
         """Get the control for the given state. Warm start parameter is an initial guess for control actions."""
         seqs = [[0] * (self.N + 1) for i in range(self.n)]  # switching seqs for agents
 
-        xc = [None] * self.n    # coupling states, e.g., [x_0, x_2] for agent 1
-        xl = [None] * self.n    # local states, e.g., x_1 for agent 1
-        x_full = [None] * self.n    # augmented states, e.g., [x_0, x_1, x_2] for agent 1
+        xc = [None] * self.n  # coupling states, e.g., [x_0, x_2] for agent 1
+        xl = [None] * self.n  # local states, e.g., x_1 for agent 1
+        x_full = [None] * self.n  # augmented states, e.g., [x_0, x_1, x_2] for agent 1
         action_list = None
         sol_list = None
         error_flag = False
@@ -294,7 +292,7 @@ class GAdmmCoordinator(Agent):
                 x_plot_list,
                 x_full_plot_list,
                 switch_plot_list,
-                iter
+                iter,
             )
 
         if not error_flag and not infeas_flag:
@@ -329,17 +327,17 @@ class GAdmmCoordinator(Agent):
                 else:
                     x_temp[i][:, [k]] = next_state
         return x_temp
-    
+
     def calculate_residual(self, x_list: list[np.ndarray], z: np.ndarray) -> float:
         """Calculate the residual of the ADMM solution.
-        
+
         Parameters
         ----------
         x_list : list[np.ndarray]
             List of full augmented states.
         z_list : list[np.ndarray]
             List of copy variables.
-            
+
         Returns
         -------
         float
@@ -349,10 +347,10 @@ class GAdmmCoordinator(Agent):
             for j in range(len(self.G[i])):
                 for k in range(self.N + 1):
                     res += np.linalg.norm(
-                        x_list[i][j * self.nx_l : (j + 1) * self.nx_l, [k]] - z[j * self.nx_l : (j + 1) * self.nx_l, [k]]
+                        x_list[i][j * self.nx_l : (j + 1) * self.nx_l, [k]]
+                        - z[j * self.nx_l : (j + 1) * self.nx_l, [k]]
                     )
         return res
-
 
     def plot_admm_iters(self, u_list, z_list, x_list, x_full_list, switch_list, iter):
         plt.rc("text", usetex=True)
