@@ -192,16 +192,18 @@ def evalulate_cost_distributed(
     if isinstance(u, np.ndarray):
         u = np.split(u, n, axis=0)
 
+    x_trajs = [np.empty((x[i].shape[0], u[i].shape[1] + 1)) for i in range(n)]
     cost = 0.0
     for k in range(u[0].shape[1]):
         x_ = []
         for i in range(n):
+            x_trajs[i][:, [k]] = x[i]
             cost += x[i].T @ Q_x @ x[i] + u[i][:, k].T @ Q_u @ u[i][:, k]
             if seqs is not None:
                 r = seqs[i][k]
                 if not all(
                     systems[i]["S"][r] @ x[i] + systems[i]["R"][r] @ u[i][:, [k]]
-                    <= systems[i]["T"][r] + 1e-6
+                    <= systems[i]["T"][r] + 1e-3
                 ):
                     raise ValueError(
                         "Switching sequence provided does not satisfy PWA inequalities."

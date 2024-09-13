@@ -105,6 +105,11 @@ class GAdmmCoordinator(Agent):
             iters=1,
         )
 
+    def reset(self, seed=None) -> None:
+        """Reset the admm dual and copy variables to zeros."""
+        self.admm_coordinator.reset()
+        return super().reset(seed)
+
     def evaluate(
         self,
         env: Env,
@@ -285,15 +290,16 @@ class GAdmmCoordinator(Agent):
                 if res < self.residual_tol:
                     break
 
-        if self.debug_plot:
-            self.plot_admm_iters(
-                u_plot_list,
-                z_plot_list,
-                x_plot_list,
-                x_full_plot_list,
-                switch_plot_list,
-                iter,
-            )
+        if not error_flag:
+            if self.debug_plot:
+                self.plot_admm_iters(
+                    u_plot_list,
+                    z_plot_list,
+                    x_plot_list,
+                    x_full_plot_list,
+                    switch_plot_list,
+                    iter,
+                )
 
         if not error_flag and not infeas_flag:
             self.prev_sol = u
