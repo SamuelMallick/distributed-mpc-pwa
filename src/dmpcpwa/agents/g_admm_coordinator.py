@@ -36,6 +36,7 @@ class GAdmmCoordinator(Agent):
         debug_plot: bool = False,
         admm_iters: int = 50,
         switching_iters: int | float = float("inf"),
+        residual_tol: float | None = None,
         agent_class=PwaAgent,
     ) -> None:
         """Instantiates the coordinator, creating n PWA agents.
@@ -60,6 +61,8 @@ class GAdmmCoordinator(Agent):
             Number of iterations for the switching ADMM procedure.
         switching_iters: int
             For iterations greater than switching_iters, switching is no longer permitted and the ADMM iterations are standard.
+        residual_tol: float | None
+            Tolerance for the residual of the ADMM solution. If not None, the algorithm will terminate early if the residual is below this value.
         agent_class
             The class to use for local agents."""
 
@@ -70,6 +73,7 @@ class GAdmmCoordinator(Agent):
         self.admm_iters = admm_iters
         self.switching_iters = switching_iters
         self.debug_plot = debug_plot
+        self.residual_tol = residual_tol
 
         # construct the agents
         self.n = len(local_mpcs)
@@ -159,8 +163,9 @@ class GAdmmCoordinator(Agent):
         """Get the control for the given state. Warm start parameter is an initial guess for control actions."""
         seqs = [[0] * (self.N + 1) for i in range(self.n)]  # switching seqs for agents
 
-        xc = [None] * self.n
-        x_pred = [None] * self.n
+        xc = [None] * self.n    # coupling states, e.g., [x_0, x_2] for agent 1
+        xl = [None] * self.n    # local states, e.g., x_1 for agent 1
+        x_full = [None] * self.n    # augmented states, e.g., [x_0, x_1, x_2] for agent 1
         action_list = None
         sol_list = None
         error_flag = False
@@ -249,36 +254,38 @@ class GAdmmCoordinator(Agent):
                 )
 
             if not error_flag:
-                if self.debug_plot:
-                    for i in range(self.n):
-                        u_plot_list[i][iter] = np.asarray(sol_list[i].vals["u"])
-                        z_plot_list[i][iter] = self.admm_coordinator.z[
-                            i * self.nx_l : (i + 1) * self.nx_l, :
-                        ]
-                        x_plot_list[i][iter] = np.asarray(sol_list[i].vals["x"])
-                        x_full_plot_list[i][iter] = np.vstack(
-                            [
-                                np.asarray(sol_list[i].vals["x_c"])[
-                                    : (self.G[i].index(i) * self.nx_l), :
-                                ],
-                                np.asarray(sol_list[i].vals["x"]),
-                                np.asarray(sol_list[i].vals["x_c"])[
-                                    (self.G[i].index(i) * self.nx_l) :, :
-                                ],
-                            ]
-                        )
-
                 # extract the vars across the horizon from the ADMM sol for each agent
                 for i in range(self.n):
                     u[i] = np.asarray(sol_list[i].vals["u"])
-                    x_pred[i] = np.asarray(sol_list[i].vals["x"])
+                    xl[i] = np.asarray(sol_list[i].vals["x"])
                     xc_out = np.asarray(sol_list[i].vals["x_c"])
                     xc_temp = []
                     for j in range(self.agents[i].num_neighbours):
                         xc_temp.append(xc_out[self.nx_l * j : self.nx_l * (j + 1), :])
                     xc[i] = xc_temp
+                    x_full[i] = np.vstack(
+                        [
+                            xc_out[: self.nx_l * self.G[i].index(i), :],
+                            xl[i],
+                            xc_out[self.nx_l * self.G[i].index(i) :, :],
+                        ]
+                    )
+
+                if self.debug_plot:
+                    for i in range(self.n):
+                        u_plot_list[i][iter] = u[i]
+                        z_plot_list[i][iter] = self.admm_coordinator.z[
+                            i * self.nx_l : (i + 1) * self.nx_l, :
+                        ]
+                        x_plot_list[i][iter] = xl[i]
+                        x_full_plot_list[i][iter] = x_full[i]
             else:
                 break
+
+            if self.residual_tol:
+                res = self.calculate_residual(x_full, self.admm_coordinator.z)
+                if res < self.residual_tol:
+                    break
 
         if self.debug_plot:
             self.plot_admm_iters(
@@ -287,18 +294,19 @@ class GAdmmCoordinator(Agent):
                 x_plot_list,
                 x_full_plot_list,
                 switch_plot_list,
+                iter
             )
 
         if not error_flag and not infeas_flag:
             self.prev_sol = u
-            self.prev_traj = x_pred
+            self.prev_traj = xl
             self.prev_sol_time = sol_time
 
         return (
             cs.DM(action_list) if not infeas_flag and not error_flag else warm_start,
             error_flag,
             infeas_flag,
-            {"sol_list": sol_list, "seqs": seqs},
+            {"sol_list": sol_list, "seqs": seqs, "iter": iter},
         )
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
@@ -321,8 +329,32 @@ class GAdmmCoordinator(Agent):
                 else:
                     x_temp[i][:, [k]] = next_state
         return x_temp
+    
+    def calculate_residual(self, x_list: list[np.ndarray], z: np.ndarray) -> float:
+        """Calculate the residual of the ADMM solution.
+        
+        Parameters
+        ----------
+        x_list : list[np.ndarray]
+            List of full augmented states.
+        z_list : list[np.ndarray]
+            List of copy variables.
+            
+        Returns
+        -------
+        float
+            The residual of the ADMM solution."""
+        res = 0.0
+        for i in range(self.n):
+            for j in range(len(self.G[i])):
+                for k in range(self.N + 1):
+                    res += np.linalg.norm(
+                        x_list[i][j * self.nx_l : (j + 1) * self.nx_l, [k]] - z[j * self.nx_l : (j + 1) * self.nx_l, [k]]
+                    )
+        return res
 
-    def plot_admm_iters(self, u_list, z_list, x_list, x_full_list, switch_list):
+
+    def plot_admm_iters(self, u_list, z_list, x_list, x_full_list, switch_list, iter):
         plt.rc("text", usetex=True)
         plt.rc("font", size=14)
         plt.style.use("bmh")
@@ -330,7 +362,7 @@ class GAdmmCoordinator(Agent):
         t = 0
         _, u_axs = plt.subplots(self.n, 1, constrained_layout=True, sharex=True)
         for i in range(len(u_list)):
-            u_axs[i].plot([u_list[i][k][:, t] for k in range(len(u_list[i]))])
+            u_axs[i].plot([u_list[i][k][:, t] for k in range(iter)])
             u_axs[i].plot(
                 switch_list[i],
                 [u_list[i][k][0, t] for k in switch_list[i]],
@@ -343,7 +375,7 @@ class GAdmmCoordinator(Agent):
 
         _, res_axs = plt.subplots(1, 1, constrained_layout=True, sharex=True)
         res = []
-        for tau in range(len(u_list[i])):
+        for tau in range(iter):
             res.append(0.0)
             for i in range(self.n):
                 for j in range(len(self.G[i])):
@@ -359,5 +391,5 @@ class GAdmmCoordinator(Agent):
         res_axs.set_xlabel(r"$\tau$")
         save2tikz(plt.gcf())
 
-        print(f"Final residaul = {res[-1]}")
+        print(f"Final residaul = {res[iter-1]}")
         plt.show()
