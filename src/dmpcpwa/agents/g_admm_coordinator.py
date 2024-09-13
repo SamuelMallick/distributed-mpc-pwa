@@ -126,7 +126,7 @@ class GAdmmCoordinator(Agent):
                 agent.on_episode_start(env, episode, state)
 
             while not (truncated or terminated):
-                action, sol_list, infeas_guess_flag, error_flag = self.g_admm_control(
+                action, infeas_guess_flag, error_flag, info = self.g_admm_control(
                     state
                 )
 
@@ -178,7 +178,7 @@ class GAdmmCoordinator(Agent):
         # generate initial feasible coupling via dynamics rollout
         x_rout = self.dynamics_rollout(x, u)
         if x_rout is None:
-            logger.debug(f"Rollout of initial control guess {u} was infeasible.")
+            # logger.debug(f"Rollout of initial control guess {u} was infeasible.")
             infeas_flag = True
 
         if self.debug_plot:  # store control at each iter to plot ADMM convergence
@@ -206,7 +206,7 @@ class GAdmmCoordinator(Agent):
         for iter in range(self.admm_iters):
             if infeas_flag:
                 break
-            logger.debug(f"Greedy admm iter {iter}")
+            # logger.debug(f"Greedy admm iter {iter}")
             # generate local sequences and choose one
             if iter < self.switching_iters:
                 for i in range(self.n):
@@ -217,7 +217,7 @@ class GAdmmCoordinator(Agent):
                             [x_rout[j] for j in range(self.n) if self.Adj[i, j] == 1],
                         )
                         seqs[i] = new_seqs[0]  # use first by default for first iter
-                        logger.debug(f"Agent {i} initial sez: {seqs[i]}")
+                        # logger.debug(f"Agent {i} initial sez: {seqs[i]}")
                     else:
                         new_seqs = self.agents[i].eval_sequences(
                             x[i],
@@ -228,9 +228,9 @@ class GAdmmCoordinator(Agent):
                         if seqs[i] in new_seqs:
                             new_seqs.remove(seqs[i])
                         if len(new_seqs) > 0:
-                            logger.debug(
-                                f"Agent {i} switched: {seqs[i]} to {new_seqs[0]}"
-                            )
+                            # logger.debug(
+                            #     f"Agent {i} switched: {seqs[i]} to {new_seqs[0]}"
+                            # )
                             seqs[i] = new_seqs[0]  # for now choosing arbritrarily first
 
                             if self.debug_plot:
@@ -296,9 +296,9 @@ class GAdmmCoordinator(Agent):
 
         return (
             cs.DM(action_list) if not infeas_flag and not error_flag else warm_start,
-            sol_list,
             error_flag,
             infeas_flag,
+            {"sol_list": sol_list, "seqs": seqs},
         )
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
