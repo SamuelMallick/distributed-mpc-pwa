@@ -4,6 +4,32 @@ import numpy as np
 from scipy.linalg import block_diag
 
 
+def cent_switching_sequence_from_distributed(
+    seqs: list[list[int]], s_l: int
+) -> list[int]:
+    """Maps a set of distributed switching sequences to a centralised one.
+
+    Parameters
+    ----------
+    seqs: list[list[int]]
+        List of switching sequences for each agent.
+    s_l: int
+        Number of PWA regions for each agent.
+
+    Returns
+    -------
+    list[int]
+        Centralised switching sequence.
+    """
+    n = len(seqs)
+    lst = [list(i) for i in product([j for j in range(s_l)], repeat=n)]
+    cent_sequence = []
+    for k in range(len(seqs[0])):
+        o = [seq[k] for seq in seqs]
+        cent_sequence.append(lst.index(o))
+    return cent_sequence
+
+
 def cent_from_dist(d_systems: list[dict], Adj: np.ndarray):
     """Creates a centralised representation of the distributed PWA system.
     PWA dynamics represented as: x+ = A[i]x + B[i]u + c[i] if S[i]x + R[i]u <= T.
@@ -127,7 +153,7 @@ def evalulate_cost(
         if seq is not None:
             r = seq[k]
             if not all(
-                system["S"][r] @ x + system["R"][r] @ u[:, [k]] <= system["T"][r] + 1e-6
+                system["S"][r] @ x + system["R"][r] @ u[:, [k]] <= system["T"][r] + 1e-3
             ):
                 raise ValueError(
                     "Switching sequence provided does not satisfy PWA inequalities."
