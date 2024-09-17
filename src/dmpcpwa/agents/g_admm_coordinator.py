@@ -285,8 +285,8 @@ class GAdmmCoordinator(Agent):
             else:
                 break
 
+            res = self.calculate_residual(x_full, self.admm_coordinator.z)
             if self.residual_tol:
-                res = self.calculate_residual(x_full, self.admm_coordinator.z)
                 if res < self.residual_tol:
                     break
 
@@ -310,7 +310,7 @@ class GAdmmCoordinator(Agent):
             cs.DM(action_list) if not infeas_flag and not error_flag else warm_start,
             error_flag,
             infeas_flag,
-            {"sol_list": sol_list, "seqs": seqs, "iter": iter},
+            {"sol_list": sol_list, "seqs": seqs, "iter": iter, "res": res},
         )
 
     def dynamics_rollout(self, x: list[np.ndarray], u: list[np.ndarray]):
