@@ -119,7 +119,7 @@ def evalulate_cost(
     Q_x: np.ndarray,
     Q_u: np.ndarray,
     seq: None | list[int] = None,
-) -> float:
+) -> tuple[float, np.ndarray]:
     """Evaluate the cost of a trajectory given a PWA system. The cost is assumed to be quadratic
     with x'Q_x*x + u'Q_u*u for each state and control pair plus x'Q_x*x for the final state. Initial state is propagated by the
     PWA dynamics. If a seq is provided, the switching sequence is used to determine the regions
@@ -142,8 +142,8 @@ def evalulate_cost(
 
     Returns
     -------
-    float
-        Cost of the trajectory.
+    tuple[float, np.ndarray]
+        Cost of the trajectory and the state traectory.    
     """
     x_traj = np.empty((x.shape[0], u.shape[1] + 1))
     cost = 0.0
@@ -173,7 +173,7 @@ def evalulate_cost(
             if not region_found:
                 raise ValueError("No region found for the current state and input.")
         x = system["A"][r] @ x + system["B"][r] @ u[:, [k]] + system["c"][r]
-    return cost + x.T @ Q_x @ x
+    return cost + x.T @ Q_x @ x, x_traj
 
 
 def evalulate_cost_distributed(
@@ -184,7 +184,7 @@ def evalulate_cost_distributed(
     Q_x: np.ndarray,
     Q_u: np.ndarray,
     seqs: None | list[list[int]] = None,
-) -> float:
+) -> tuple[float, np.ndarray]:
     """Evaluate the cost of a trajectory given a distributed PWA system. The cost is assumed to be quadratic
     with x'Q_x*x + u'Q_u*u for each state and control pair plus x'Q_x*x for the final state. Initial state is propagated by the
     PWA dynamics. If a seq is provided, the switching sequence is used to determine the regions
@@ -209,8 +209,8 @@ def evalulate_cost_distributed(
 
     Returns
     -------
-    float
-        Cost of the trajectory.
+    tuple[float, np.ndarray]
+        Cost of the trajectory and the state trajectory.
     """
     n = len(systems)
     if isinstance(x, np.ndarray):
@@ -262,4 +262,4 @@ def evalulate_cost_distributed(
                 + coupling
             )
         x = x_
-    return cost + sum(x[i].T @ Q_x @ x[i] for i in range(n))
+    return cost + sum(x[i].T @ Q_x @ x[i] for i in range(n)), np.vstack(x_trajs)
